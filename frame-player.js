@@ -1,6 +1,6 @@
 ﻿// ?v= busts polluted CDN edge entries missing CORS headers
-const PREFETCH_FRAMES = 50; // ~50 frames ahead while scrolling
-const WARM_RATIO = 0.12; // download first half into HTTP cache before start
+const PREFETCH_FRAMES = 80; // ~50 frames ahead while scrolling
+const WARM_RATIO = 0.20; // download first half into HTTP cache before start
 const WARM_CONCURRENCY = 6;
 
 // Bounded decoded-frame cache. Eight frames share a WebP sheet, reducing
