@@ -36,13 +36,15 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .film-loader-pct { font: 400 12px/1 var(--serif); color: #cbc6bb; letter-spacing: .04em; }
 
 /* Dedicated film and copy cells: no type covers any part of the source frame. */
-.journey { height: 950svh; background: var(--ink); color: var(--paper); }
+.journey { height: 800svh; min-height: 4000px; background: var(--ink); color: var(--paper); position: relative; }
 .journey-stage {
   position: sticky; top: 0; height: 100svh; min-height: 560px; display: grid;
   grid-template-columns: minmax(0, 1fr); grid-template-rows: 54px minmax(0, 1fr) 218px 44px;
-  padding-bottom: env(safe-area-inset-bottom, 0px); overflow: clip;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-.journey-stage, .chapter-copy, .film-region, .copy-region { touch-action: none; -webkit-user-select: none; user-select: none; }
+html, body { margin: 0; padding: 0; width: 100%; min-height: 100%; overflow-x: clip; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.journey-stage { pointer-events: none; }
+.journey-stage a, .journey-stage button, .journey-stage input, .journey-stage select, .journey-stage textarea, .audio-prompt, dialog, .dialog-close, .rsvp-button { pointer-events: auto; }
 .site-header { grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 22px; }
 .monogram { display: inline-flex; align-items: center; min-height: 44px; font: 500 26px var(--serif); letter-spacing: -.08em; }
 .monogram span { font-style: italic; font-weight: 400; color: var(--gold); font-size: .65em; margin: 0 .14em; }
@@ -56,7 +58,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .copy-region { grid-row: 3; position: relative; min-width: 0; padding: 0 20px; }
 .copy-ornament { display: none; }
 .chapter-copy { position: absolute; inset: 0 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; visibility: hidden; text-align: center; pointer-events: none; transition: opacity 0.4s cubic-bezier(.23, 1, .32, 1), transform 0.4s cubic-bezier(.23, 1, .32, 1); transform: translateY(10px); }
-.chapter-copy.is-active { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); }
+.chapter-copy.is-active { opacity: 1; visibility: visible; pointer-events: none; transform: translateY(0); }
+.chapter-copy.is-active a, .chapter-copy.is-active button { pointer-events: auto; }
 .eyebrow, .small-label { font: 500 9px/1.6 var(--sans); letter-spacing: .15em; text-transform: uppercase; }
 .chapter-copy .eyebrow { color: var(--gold); font-size: 8px; letter-spacing: .13em; margin-bottom: 8px; }
 .chapter-copy h1 { font: 400 clamp(2.5rem, 11.5vw, 3.6rem)/1 var(--serif); letter-spacing: -.055em; }
@@ -254,10 +257,17 @@ html.static-journey .chapter-nav { visibility: hidden; }
 
 /* Continuous full-screen cinema, in the spirit of the Kedarnath invitation. */
 .journey-stage {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
   display: block;
   padding: 0;
   min-height: 460px;
   isolation: isolate;
+  pointer-events: none;
 }
 .film-region {
   position: absolute;
@@ -276,6 +286,7 @@ html.static-journey .chapter-nav { visibility: hidden; }
   padding: 0;
 }
 #journey-video {
+  pointer-events: none;
   object-fit: cover;
   object-position: 50% 50%;
   image-rendering: -webkit-optimize-contrast;

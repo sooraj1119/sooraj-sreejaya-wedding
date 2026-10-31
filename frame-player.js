@@ -265,6 +265,7 @@ export class FramePlayer {
           this.onProgress?.(1, "");
           this.onReady(this);
         }
+        this.onFrame?.(this.time);
       }
     }
     this.wake();
@@ -407,6 +408,21 @@ export class FramePlayer {
     this.raf = 0;
     this.canvas.dataset.playing = "false";
     this.status.textContent = "";
+  }
+
+  scrubTo(time) {
+    if (!this.store || this.closed) return;
+    const target = Math.max(0, Math.min(this.end, time));
+    const index = Math.round(target * this.fps);
+    const sheet = Math.floor(index / this.perSheet);
+    const dir = index >= this.frame ? 1 : -1;
+    this.store.focus(sheet, dir);
+    if (this.drawFrame(index)) {
+      this.time = target;
+      this.pendingJump = null;
+    } else {
+      this.pendingJump = target;
+    }
   }
 
   seek(time) {

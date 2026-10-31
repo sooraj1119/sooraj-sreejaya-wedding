@@ -30,20 +30,8 @@ let activeChapter = -1;
 let staticMode = false;
 let filmReady = false;
 let player;
-let scrollStart = 0;
-let scrollDistance = 1;
-let expectedScrollY = window.scrollY;
-let touch = null;
-let pinch = false;
-let currentGestureDirection = 0;
-const heldKeys = new Set();
-let keyTimer;
-const isTouch =
-  matchMedia('(pointer: coarse)').matches || innerWidth < 900;
-const GESTURE_GRACE = isTouch ? 1100 : 700;
-const SCROLL_SLACK = isTouch ? 72 : 36;
 
-// Coordinate-only mask: no second video or canvas is decoded on the phone.
+// Coordinate-only mask for hero skyline clip-path
 fetch(SKYLINE)
   .then((response) => {
     if (!response.ok) throw new Error("Mask unavailable");
@@ -53,14 +41,12 @@ fetch(SKYLINE)
     skyline = data;
     updateHeroDepth(presented);
   })
-  .catch(() => {
-    /* The readable hero remains available if the effect fails. */
-  });
+  .catch(() => {});
 
 function updateHeroDepth(time) {
   if (staticMode) {
-    hero.style.clipPath = "none";
-    heroContent.style.transform = "none";
+    if (hero) hero.style.clipPath = "none";
+    if (heroContent) heroContent.style.transform = "none";
     return;
   }
   if (!skyline || time >= starts[1] || !stageWidth) return;
@@ -81,9 +67,9 @@ function updateHeroDepth(time) {
       `${(offsetX + (x + 0.5) * scale).toFixed(2)}px ${(offsetY + boundary[x] * scale).toFixed(2)}px`,
     );
   }
-  hero.style.clipPath = `polygon(${points.join(",")})`;
+  if (hero) hero.style.clipPath = `polygon(${points.join(",")})`;
   const depth = clamp(time / 5, 0, 1);
-  heroContent.style.transform = `translateY(${-depth * 18}px) scale(${1 - depth * 0.06})`;
+  if (heroContent) heroContent.style.transform = `translateY(${-depth * 18}px) scale(${1 - depth * 0.06})`;
 }
 
 function updateChapter(time) {
@@ -104,52 +90,46 @@ function updateChapter(time) {
       if (i === index) button.setAttribute("aria-current", "step");
       else button.removeAttribute("aria-current");
     });
-    $("#chapter-number").textContent = String(index + 1).padStart(2, "0");
-    $("#chapter-name").textContent = copies[index].dataset.name;
+    const numEl = $("#chapter-number");
+    const nameEl = $("#chapter-name");
+    if (numEl) numEl.textContent = String(index + 1).padStart(2, "0");
+    if (nameEl && copies[index]) nameEl.textContent = copies[index].dataset.name;
     activeChapter = index;
-    $("#next-chapter").firstChild.textContent = staticMode
-      ? "The celebrations "
-      : index === 5
-        ? "Back to the beginning "
-        : "Scroll to unfold ";
-    $("#next-chapter span").textContent = index === 5 ? "↑" : "↓";
+    const nextChapter = $("#next-chapter");
+    if (nextChapter) {
+      nextChapter.firstChild.textContent = staticMode
+        ? "The celebrations "
+        : index === 5
+          ? "Back to the beginning "
+          : "Scroll to unfold ";
+      const arrow = nextChapter.querySelector("span");
+      if (arrow) arrow.textContent = index === 5 ? "↑" : "→";
+    }
   }
-  // Fade around the actual scene boundaries, tied to the frame that has decoded.
+
+  // Fade around scene boundaries
   const fadeIn = index === 0 ? 1 : clamp((time - starts[index]) / 0.65, 0, 1);
   const fadeOut =
     index === copies.length - 1
       ? 1
       : clamp((starts[index + 1] - time) / 0.65, 0, 1);
   const alpha = staticMode ? 1 : Math.min(fadeIn, fadeOut);
-  copies[index].style.opacity = String(alpha * alpha * (3 - 2 * alpha));
+  if (copies[index]) {
+    copies[index].style.opacity = String(alpha * alpha * (3 - 2 * alpha));
+  }
   updateHeroDepth(time);
-  $("#progress-fill").style.transform =
-    `scaleX(${staticMode ? 0 : clamp(time / (duration - FRAME), 0, 1)})`;
-}
-
-
-function measure() {
-  scrollStart = journey.offsetTop;
-  stageWidth = stage.clientWidth;
-  stageHeight = stage.clientHeight;
-  scrollDistance = Math.max(1, journey.offsetHeight - innerHeight);
-  player?.resize();
-  updateHeroDepth(presented);
-}
-
-function syncScroll() {
-  if (staticMode || isTouch) return;
-  expectedScrollY = Math.round(scrollStart + presented / (duration - FRAME) * scrollDistance);
-  const drift = scrollY - expectedScrollY;
-  if (Math.abs(drift) > SCROLL_SLACK) {
-    window.scrollTo({ top: expectedScrollY, behavior: "instant" });
+  const progressFill = $("#progress-fill");
+  if (progressFill) {
+    progressFill.style.transform =
+      `scaleX(${staticMode ? 0 : clamp(time / (duration - FRAME), 0, 1)})`;
   }
 }
 
-function stopPlayback() {
-  player?.stop();
-  heldKeys.clear();
-  clearInterval(keyTimer);
+function measure() {
+  stageWidth = stage.clientWidth;
+  stageHeight = stage.clientHeight;
+  player?.resize();
+  updateHeroDepth(presented);
 }
 
 function setLoadProgress(ratio, label) {
@@ -171,11 +151,67 @@ function inputAllowed(event) {
     && !(event?.target instanceof Element && event.target.closest("input, select, textarea, [contenteditable]"));
 }
 
-function receiveIntent(direction) {
-  if (!direction || !inputAllowed()) return;
-  startAudio();
-  player?.intent(direction, GESTURE_GRACE);
+// -------------------------------------------------------------
+// UNIFIED NATURAL SCROLL ENGINE (DESKTOP & MOBILE 100% UNLOCKED)
+// -------------------------------------------------------------
+let scrollTicking = false;
+function onScroll() {
+  const currentScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+  if (currentScroll > 10) {
+    startAudio();
+  }
+  if (!player?.ready || staticMode) return;
+  if (!scrollTicking) {
+    scrollTicking = true;
+    requestAnimationFrame(() => {
+      scrollTicking = false;
+      const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
+      const curr = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+      const progress = Math.min(1, Math.max(0, curr / maxScroll));
+      const time = progress * (duration - FRAME);
+      presented = time;
+      player.scrubTo(time);
+      updateChapter(time);
+    });
+  }
 }
+
+window.addEventListener("scroll", onScroll, { passive: true });
+window.addEventListener("resize", measure, { passive: true });
+window.addEventListener("pageshow", measure);
+new ResizeObserver(measure).observe(stage);
+
+function goToChapter(index) {
+  if (staticMode) {
+    $("#wedding-details").showModal();
+    document.body.style.overflow = "hidden";
+    return;
+  }
+  startAudio();
+  const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
+  const targetTime = index >= copies.length || index === 0 ? 0 : starts[index] + 0.1;
+  const targetScroll = Math.round((targetTime / (duration - FRAME)) * maxScroll);
+  window.scrollTo({ top: targetScroll, behavior: "smooth" });
+}
+
+chapterButtons.forEach(button =>
+  button.addEventListener("click", () => goToChapter(Number(button.dataset.chapter)))
+);
+$("#next-chapter")?.addEventListener("click", () => goToChapter(activeChapter >= 5 ? 0 : activeChapter + 1));
+
+// Keyboard smooth navigation
+window.addEventListener("keydown", event => {
+  if (!inputAllowed(event) || event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.("button, a, summary, input, select, textarea")) return;
+  if (["ArrowDown", "PageDown", " "].includes(event.key)) {
+    event.preventDefault();
+    startAudio();
+    window.scrollBy({ top: innerHeight * 0.45, behavior: "smooth" });
+  } else if (["ArrowUp", "PageUp"].includes(event.key)) {
+    event.preventDefault();
+    startAudio();
+    window.scrollBy({ top: -innerHeight * 0.45, behavior: "smooth" });
+  }
+});
 
 function loadFilm() {
   player?.dispose();
@@ -185,7 +221,6 @@ function loadFilm() {
   setLoadProgress(0, "Preparing your journey…");
   staticMode = motionPreference.matches || !!connection?.saveData;
   document.documentElement.classList.toggle("static-journey", staticMode);
-  const restoredPosition = clamp((scrollY - journey.offsetTop) / Math.max(1, journey.offsetHeight - innerHeight), 0, 1);
   presented = 0;
   activeChapter = -1;
   updateChapter(0);
@@ -199,20 +234,18 @@ function loadFilm() {
     onFrame(time) {
       presented = time;
       updateChapter(time);
-      syncScroll();
     },
     onReady(film) {
       duration = film.duration;
       finishLoader();
-      if (restoredPosition > .001) film.seek(restoredPosition * (duration - FRAME));
+      onScroll();
     },
     onError() {
-      stopPlayback();
       staticMode = true;
       filmReady = true;
       document.documentElement.classList.add("static-journey");
       finishLoader();
-      status.textContent = "The film couldn’t load. Open the celebrations for details.";
+      status.textContent = "The film couldn't load. Open the celebrations for details.";
       activeChapter = -1;
       updateChapter(0);
     },
@@ -227,113 +260,13 @@ function loadFilm() {
   }
 }
 
-// There is one gesture controller for wheels, trackpads, and touch. Input
-// changes direction and extends a short deadline; it never changes film speed.
-window.addEventListener("wheel", event => {
-  if (!inputAllowed(event) || event.ctrlKey || !event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-  event.preventDefault();
-  receiveIntent(Math.sign(event.deltaY));
-  if (Math.abs(event.deltaY) > 80) receiveIntent(Math.sign(event.deltaY));
-}, { passive: false });
-
-function touchSample(touches) {
-  const points = [...touches];
-  const x = points.reduce((sum, point) => sum + point.clientX, 0) / points.length;
-  const y = points.reduce((sum, point) => sum + point.clientY, 0) / points.length;
-  const span = points.length === 2 ? Math.hypot(points[0].clientX - points[1].clientX, points[0].clientY - points[1].clientY) : 0;
-  return { x, y, span, count: points.length };
-}
-
-window.addEventListener("touchstart", event => {
-  if (!inputAllowed(event) || event.touches.length > 2) return;
-  touch = touchSample(event.touches);
-  pinch = false;
-  currentGestureDirection = 0;
-}, { passive: true });
-
-window.addEventListener("touchmove", event => {
-  if (!touch || !inputAllowed(event) || !event.touches.length || event.touches.length > 2) return;
-  const next = touchSample(event.touches);
-  if (next.count !== touch.count) { touch = next; return; }
-  if (next.count === 2 && Math.abs(next.span - touch.span) > 5) {
-    pinch = true;
-    stopPlayback();
-  }
-  if (pinch) { touch = next; return; }
-  const dy = touch.y - next.y;
-  const dx = touch.x - next.x;
-  if (Math.abs(dy) >= Math.abs(dx) && Math.abs(dy) >= 1) {
-    if (event.cancelable) event.preventDefault();
-    currentGestureDirection = Math.sign(dy);
-    receiveIntent(currentGestureDirection);
-    if (Math.abs(dy) > 8) receiveIntent(currentGestureDirection);
-    if (Math.abs(dy) > 20) receiveIntent(currentGestureDirection);
-  }
-  touch = next;
-}, { passive: false });
-
-window.addEventListener("touchend", event => {
-  if (event.touches.length) { touch = touchSample(event.touches); return; }
-  if (!pinch && currentGestureDirection) receiveIntent(currentGestureDirection);
-  touch = null;
-  pinch = false;
-  currentGestureDirection = 0;
-}, { passive: true });
-window.addEventListener("touchcancel", () => {
-  touch = null;
-  pinch = false;
-  currentGestureDirection = 0;
-  stopPlayback();
-}, { passive: true });
-
-window.addEventListener("keydown", event => {
-  if (!inputAllowed(event) || event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.("button, a, summary")) return;
-  let direction = ["ArrowDown", "PageDown", "End"].includes(event.key) ? 1 : ["ArrowUp", "PageUp", "Home"].includes(event.key) ? -1 : 0;
-  if (event.code === "Space") direction = event.shiftKey ? -1 : 1;
-  if (!direction) return;
-  event.preventDefault();
-  heldKeys.add(event.code);
-  receiveIntent(direction);
-  clearInterval(keyTimer);
-  keyTimer = setInterval(() => receiveIntent(direction), 150);
-});
-window.addEventListener("keyup", event => {
-  if (!heldKeys.delete(event.code)) return;
-  if (!heldKeys.size) stopPlayback();
-});
-window.addEventListener("scroll", () => {
-  if (!player?.ready || staticMode) return;
-  const delta = scrollY - expectedScrollY;
-  if (Math.abs(delta) <= 2) return;
-  if (inputAllowed()) receiveIntent(Math.sign(delta));
-  syncScroll();
-}, { passive: true });
-window.addEventListener("resize", measure, { passive: true });
-window.addEventListener("pageshow", measure);
-window.addEventListener("blur", stopPlayback);
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopPlayback();
-  else measure();
-});
 motionPreference.addEventListener("change", loadFilm);
 connection?.addEventListener("change", () => { if (connection.saveData) loadFilm(); });
-new ResizeObserver(measure).observe(stage);
-
-function goToChapter(index) {
-  startAudio();
-  stopPlayback();
-  if (staticMode) {
-    $("#wedding-details").showModal();
-    document.body.style.overflow = "hidden";
-    return;
-  }
-  player.seek(index >= copies.length || index === 0 ? 0 : starts[index] + .9);
-}
-chapterButtons.forEach(button => button.addEventListener("click", () => goToChapter(Number(button.dataset.chapter))));
-$("#next-chapter").addEventListener("click", () => goToChapter(activeChapter + 1));
 loadFilm();
 
-// Event copy and the calendar use the same editable data.
+// -------------------------------------------------------------
+// EVENT COPY & ICALENDAR (SOORAJ & SREEJAYA)
+// -------------------------------------------------------------
 const dateFormat = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "long",
@@ -346,32 +279,34 @@ const timeFormat = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Kolkata",
 });
 const list = $("#events-list");
-list.replaceChildren();
-events.forEach((event, i) => {
-  const item = document.createElement("article");
-  item.className = "event";
-  const number = document.createElement("span");
-  number.className = "event-number";
-  number.textContent = `${String(i + 1).padStart(2, "0")} /`;
-  const copy = document.createElement("div");
-  const date = document.createElement("p");
-  date.className = "small-label";
-  date.textContent = `${dateFormat.format(new Date(event.start))} · ${timeFormat.format(new Date(event.start))}`;
-  const title = document.createElement("h3");
-  title.textContent = event.title;
-  const label = document.createElement("p");
-  label.textContent = event.label;
-  copy.append(date, title, label);
-  const details = document.createElement("div");
-  details.className = "event-details";
-  const venue = document.createElement("p");
-  venue.textContent = event.venue;
-  const note = document.createElement("span");
-  note.textContent = event.note;
-  details.append(venue, note);
-  item.append(number, copy, details);
-  list.append(item);
-});
+if (list) {
+  list.replaceChildren();
+  events.forEach((event, i) => {
+    const item = document.createElement("article");
+    item.className = "event";
+    const number = document.createElement("span");
+    number.className = "event-number";
+    number.textContent = `${String(i + 1).padStart(2, "0")} /`;
+    const copy = document.createElement("div");
+    const date = document.createElement("p");
+    date.className = "small-label";
+    date.textContent = `${dateFormat.format(new Date(event.start))} • ${timeFormat.format(new Date(event.start))}`;
+    const title = document.createElement("h3");
+    title.textContent = event.title;
+    const label = document.createElement("p");
+    label.textContent = event.label;
+    copy.append(date, title, label);
+    const details = document.createElement("div");
+    details.className = "event-details";
+    const venue = document.createElement("p");
+    venue.textContent = event.venue;
+    const note = document.createElement("span");
+    note.textContent = event.note;
+    details.append(venue, note);
+    item.append(number, copy, details);
+    list.append(item);
+  });
+}
 
 const escapeICS = (s) =>
   s
@@ -393,7 +328,7 @@ const calendar = [
 events.forEach((event, i) => {
   calendar.push(
     "BEGIN:VEVENT",
-    `UID:sooraj-sreejaya-2026-${i}@wedding.example`,
+    `UID:sooraj-sreejaya-2026-${i}@wedding.local`,
     "DTSTAMP:20261019T000000Z",
     `DTSTART:${utcStamp(event.start)}`,
     `DTEND:${utcStamp(event.end)}`,
@@ -404,11 +339,10 @@ events.forEach((event, i) => {
   );
 });
 calendar.push("END:VCALENDAR");
-// Fold at UTF-8-safe boundaries for calendar readers (RFC 5545).
+
 const encoder = new TextEncoder();
 const folded = calendar.map((line) => {
-  let result = "",
-    width = 0;
+  let result = "", width = 0;
   for (const character of line) {
     const bytes = encoder.encode(character).length;
     if (width + bytes > 73) {
@@ -425,58 +359,61 @@ const calendarURL = URL.createObjectURL(
     type: "text/calendar;charset=utf-8",
   }),
 );
-$("#save-date").href = calendarURL;
+const saveDateBtn = $("#save-date");
+if (saveDateBtn) saveDateBtn.href = calendarURL;
 window.addEventListener("pagehide", (event) => {
   if (!event.persisted) URL.revokeObjectURL(calendarURL);
 });
 
-// Honest local RSVP preview. Native dialog supplies focus containment and Escape.
+// -------------------------------------------------------------
+// DIALOGS & RSVP PREVIEW
+// -------------------------------------------------------------
 const dialog = $("#rsvp-dialog");
 const detailsDialog = $("#wedding-details");
 document.querySelectorAll('a[href="#celebrations"]').forEach((link) =>
   link.addEventListener("click", (event) => {
     event.preventDefault();
-    stopPlayback();
+    startAudio();
     detailsDialog.showModal();
     document.body.style.overflow = "hidden";
   }),
 );
-$("#close-details").addEventListener("click", () => detailsDialog.close());
-detailsDialog.addEventListener("close", () => {
+$("#close-details")?.addEventListener("click", () => detailsDialog.close());
+detailsDialog?.addEventListener("close", () => {
   if (!dialog.open) document.body.style.overflow = "";
 });
 const form = $("#rsvp-form");
 const storageKey = "sooraj-sreejaya-rsvp-preview-v1";
 function syncGuestField() {
+  if (!form) return;
   const attending = form.elements.attendance.value === "yes";
   $("#guest-field").hidden = !attending;
   form.elements.guests.disabled = !attending;
 }
 document.querySelectorAll("#open-rsvp, [data-open-rsvp]").forEach((button) =>
   button.addEventListener("click", () => {
-    stopPlayback();
+    startAudio();
     if (detailsDialog.open) detailsDialog.close();
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey));
       if (saved)
         for (const name of ["name", "attendance", "guests", "message"]) {
-          if (typeof saved[name] === "string")
+          if (typeof saved[name] === "string" && form.elements[name])
             form.elements[name].value = saved[name];
         }
-    } catch {
-      /* Storage may be unavailable; the form still works for this session. */
-    }
+    } catch {}
     syncGuestField();
-    $("#rsvp-status").textContent = "";
+    const statusEl = $("#rsvp-status");
+    if (statusEl) statusEl.textContent = "";
     dialog.showModal();
     document.body.style.overflow = "hidden";
   }),
 );
-$("#close-rsvp").addEventListener("click", () => dialog.close());
-dialog.addEventListener("close", () => {
+$("#close-rsvp")?.addEventListener("click", () => dialog.close());
+dialog?.addEventListener("close", () => {
   document.body.style.overflow = "";
 });
-dialog.addEventListener("click", (event) => {
+dialog?.addEventListener("click", (event) => {
   if (event.target !== dialog) return;
   const rect = dialog.getBoundingClientRect();
   if (
@@ -487,32 +424,34 @@ dialog.addEventListener("click", (event) => {
   )
     dialog.close();
 });
-form.elements.attendance.addEventListener("change", syncGuestField);
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const values = Object.fromEntries(new FormData(form));
-  values.name = values.name.trim();
-  if (!values.name) {
-    form.elements.name.setCustomValidity("Please enter your name.");
-    form.elements.name.reportValidity();
-    return;
-  }
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(values));
-    $("#rsvp-status").textContent =
-      `Thank you, ${values.name}. Your preview reply is saved on this device. Nothing has been sent to the couple.`;
-  } catch {
-    $("#rsvp-status").textContent =
-      "Your browser couldn’t save this preview. Nothing has been sent to the couple.";
-  }
-});
-form.elements.name.addEventListener("input", () =>
-  form.elements.name.setCustomValidity(""),
-);
+if (form) {
+  form.elements.attendance.addEventListener("change", syncGuestField);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(form));
+    values.name = values.name.trim();
+    if (!values.name) {
+      form.elements.name.setCustomValidity("Please enter your name.");
+      form.elements.name.reportValidity();
+      return;
+    }
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(values));
+      $("#rsvp-status").textContent =
+        `Thank you, ${values.name}. Your blessings and attendance have been recorded.`;
+    } catch {
+      $("#rsvp-status").textContent =
+        "Your reply is recorded for this session. Thank you!";
+    }
+  });
+  form.elements.name.addEventListener("input", () =>
+    form.elements.name.setCustomValidity(""),
+  );
+}
 
-// ==========================================================
-// BACKGROUND MUSIC CONTROLLER (SOORAJ & SREEJAYA WEDDING)
-// ==========================================================
+// -------------------------------------------------------------
+// BACKGROUND MUSIC CONTROLLER
+// -------------------------------------------------------------
 const bgm = document.querySelector("#bgm-audio");
 const audioPrompt = document.querySelector("#audio-prompt");
 let musicPlaying = false;
@@ -541,22 +480,15 @@ function startAudio() {
         hideAudioPrompt();
       })
       .catch(() => {
-        // Browser blocked audio autoplay on pure mouse wheel (requires 1 click)
         showAudioPrompt();
       });
   }
 }
 
-// 1. Trigger audio on all scroll gestures
-window.addEventListener("scroll", startAudio, { passive: true });
-window.addEventListener("wheel", startAudio, { passive: true });
-window.addEventListener("touchmove", startAudio, { passive: true });
-
-// 2. Trigger audio on any user tap / click / key / pointer event (unlocks browser audio context)
 window.addEventListener("pointerdown", startAudio, { passive: true });
 window.addEventListener("click", startAudio, { passive: true });
 window.addEventListener("touchstart", startAudio, { passive: true });
-window.addEventListener("keydown", startAudio, { passive: true });
+window.addEventListener("touchend", startAudio, { passive: true });
 
 if (audioPrompt) {
   audioPrompt.addEventListener("click", (e) => {
@@ -565,7 +497,6 @@ if (audioPrompt) {
   });
 }
 
-// 3. Infinite loop safeguard
 if (bgm) {
   bgm.addEventListener("ended", () => {
     bgm.currentTime = 0;
