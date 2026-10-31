@@ -164,7 +164,6 @@ function finishLoader() {
   loader?.classList.add("is-done");
   loader?.setAttribute("aria-busy", "false");
   status.textContent = "";
-  startAudio();
 }
 
 function inputAllowed(event) {
@@ -174,6 +173,7 @@ function inputAllowed(event) {
 
 function receiveIntent(direction) {
   if (!direction || !inputAllowed()) return;
+  startAudioOnScroll();
   player?.intent(direction, GESTURE_GRACE);
 }
 
@@ -321,6 +321,7 @@ connection?.addEventListener("change", () => { if (connection.saveData) loadFilm
 new ResizeObserver(measure).observe(stage);
 
 function goToChapter(index) {
+  startAudioOnScroll();
   stopPlayback();
   if (staticMode) {
     $("#wedding-details").showModal();
@@ -511,75 +512,35 @@ form.elements.name.addEventListener("input", () =>
 );
 
 // ==========================================================
-// BACKGROUND MUSIC CONTROLLER (ALWAYS-ON AMBIENCE)
+// BACKGROUND MUSIC ON SCROLL (SOORAJ & SREEJAYA WEDDING)
+// Starts automatically the instant user begins scrolling
 // ==========================================================
 const bgm = document.querySelector("#bgm-audio");
-const audioToggle = document.querySelector("#audio-toggle");
-let isAudioPlaying = false;
-let userMuted = false;
+let musicPlaying = false;
 
-function updateAudioUI(playing) {
-  isAudioPlaying = playing;
-  if (!audioToggle) return;
-  audioToggle.classList.toggle("is-playing", playing);
-  audioToggle.setAttribute("aria-label", playing ? "Mute background music" : "Play background music");
-  audioToggle.title = playing ? "Mute Music" : "Play Music";
-  const text = audioToggle.querySelector(".audio-text");
-  if (text) text.textContent = playing ? "Music on" : "Music muted";
-}
-
-function startAudio() {
-  if (!bgm || userMuted) return;
+function startAudioOnScroll() {
+  if (musicPlaying && bgm && !bgm.paused) return;
+  if (!bgm) return;
   bgm.volume = 0.75;
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
-        updateAudioUI(true);
+        musicPlaying = true;
       })
-      .catch(() => {
-        updateAudioUI(false);
-      });
+      .catch(() => {});
   }
 }
 
-function toggleAudio() {
-  if (!bgm) return;
-  if (isAudioPlaying) {
-    userMuted = true;
-    bgm.pause();
-    updateAudioUI(false);
-  } else {
-    userMuted = false;
-    startAudio();
-  }
-}
+// Global scroll and gesture listeners for instant start on scroll
+window.addEventListener("scroll", startAudioOnScroll, { passive: true });
+window.addEventListener("wheel", startAudioOnScroll, { passive: true });
+window.addEventListener("touchmove", startAudioOnScroll, { passive: true });
 
-if (audioToggle) {
-  audioToggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    toggleAudio();
-  });
-}
-
-// Always ensure music is playing on every interaction (scroll, click, touch, key)
-function ensureAudioAlwaysPlaying() {
-  if (!userMuted && bgm && bgm.paused) {
-    startAudio();
-  }
-}
-
-["pointerdown", "touchstart", "scroll", "wheel", "keydown", "click"].forEach((event) => {
-  window.addEventListener(event, ensureAudioAlwaysPlaying, { passive: true });
-});
-
-// Guard loop: if song ends or pauses unexpectedly, loop immediately
+// Loop audio continuously once started
 if (bgm) {
   bgm.addEventListener("ended", () => {
     bgm.currentTime = 0;
-    if (!userMuted) bgm.play().catch(() => {});
+    bgm.play().catch(() => {});
   });
 }
-
-// Immediate initial start attempt on load
-startAudio();
