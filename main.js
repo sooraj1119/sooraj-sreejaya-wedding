@@ -173,7 +173,7 @@ function inputAllowed(event) {
 
 function receiveIntent(direction) {
   if (!direction || !inputAllowed()) return;
-  startAudioOnScroll();
+  startAudio();
   player?.intent(direction, GESTURE_GRACE);
 }
 
@@ -321,7 +321,7 @@ connection?.addEventListener("change", () => { if (connection.saveData) loadFilm
 new ResizeObserver(measure).observe(stage);
 
 function goToChapter(index) {
-  startAudioOnScroll();
+  startAudio();
   stopPlayback();
   if (staticMode) {
     $("#wedding-details").showModal();
@@ -512,13 +512,25 @@ form.elements.name.addEventListener("input", () =>
 );
 
 // ==========================================================
-// BACKGROUND MUSIC ON SCROLL (SOORAJ & SREEJAYA WEDDING)
-// Starts automatically the instant user begins scrolling
+// BACKGROUND MUSIC CONTROLLER (SOORAJ & SREEJAYA WEDDING)
 // ==========================================================
 const bgm = document.querySelector("#bgm-audio");
+const audioPrompt = document.querySelector("#audio-prompt");
 let musicPlaying = false;
 
-function startAudioOnScroll() {
+function showAudioPrompt() {
+  if (audioPrompt && !musicPlaying) {
+    audioPrompt.classList.add("is-visible");
+  }
+}
+
+function hideAudioPrompt() {
+  if (audioPrompt) {
+    audioPrompt.classList.remove("is-visible");
+  }
+}
+
+function startAudio() {
   if (musicPlaying && bgm && !bgm.paused) return;
   if (!bgm) return;
   bgm.volume = 0.75;
@@ -527,17 +539,34 @@ function startAudioOnScroll() {
     playPromise
       .then(() => {
         musicPlaying = true;
+        hideAudioPrompt();
       })
-      .catch(() => {});
+      .catch(() => {
+        // Browser blocked audio autoplay on pure mouse wheel (requires 1 click)
+        showAudioPrompt();
+      });
   }
 }
 
-// Global scroll and gesture listeners for instant start on scroll
-window.addEventListener("scroll", startAudioOnScroll, { passive: true });
-window.addEventListener("wheel", startAudioOnScroll, { passive: true });
-window.addEventListener("touchmove", startAudioOnScroll, { passive: true });
+// 1. Trigger audio on all scroll gestures
+window.addEventListener("scroll", startAudio, { passive: true });
+window.addEventListener("wheel", startAudio, { passive: true });
+window.addEventListener("touchmove", startAudio, { passive: true });
 
-// Loop audio continuously once started
+// 2. Trigger audio on any user tap / click / key / pointer event (unlocks browser audio context)
+window.addEventListener("pointerdown", startAudio, { passive: true });
+window.addEventListener("click", startAudio, { passive: true });
+window.addEventListener("touchstart", startAudio, { passive: true });
+window.addEventListener("keydown", startAudio, { passive: true });
+
+if (audioPrompt) {
+  audioPrompt.addEventListener("click", (e) => {
+    e.stopPropagation();
+    startAudio();
+  });
+}
+
+// 3. Infinite loop safeguard
 if (bgm) {
   bgm.addEventListener("ended", () => {
     bgm.currentTime = 0;
