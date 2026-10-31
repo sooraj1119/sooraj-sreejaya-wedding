@@ -667,6 +667,93 @@ dialog h2 em { color: var(--gold-dark); font-style: italic; }
   outline: none;
 }
 
+/* Modal Dialog Content Enhancements */
+dialog .small-label {
+  color: var(--gold-dark);
+  text-shadow: none;
+}
+dialog .event-number {
+  color: var(--gold-dark);
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  margin-right: 8px;
+}
+dialog .events {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 18px 0;
+}
+dialog .event {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(208, 176, 122, 0.25);
+}
+dialog .event:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+dialog .event h3 {
+  font: 500 1.25rem/1.2 var(--serif);
+  color: #211f1a;
+  margin: 3px 0 2px;
+}
+dialog .event p {
+  font-size: 13px;
+  color: #595245;
+  line-height: 1.5;
+}
+dialog .event-details {
+  margin-left: auto;
+  text-align: right;
+  font-size: 11px;
+  color: #736959;
+  flex-shrink: 0;
+}
+@media (max-width: 500px) {
+  dialog .event {
+    flex-direction: column;
+    gap: 4px;
+  }
+  dialog .event-details {
+    text-align: left;
+    margin-left: 0;
+  }
+}
+dialog .rsvp-button {
+  background: #d0b07a;
+  color: #1a1814;
+  font-weight: 600;
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 24px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+dialog .rsvp-button:hover {
+  background: #f2d6a5;
+}
+dialog .text-link {
+  color: #8c734b;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(140, 115, 75, 0.4);
+  padding-bottom: 2px;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+dialog .text-link:hover {
+  color: #211f1a;
+  border-color: #211f1a;
+}
+
 /* ==========================================================
    MOBILE RESPONSIVENESS OVERRIDES (MAX-WIDTH 768px)
    ========================================================= */
