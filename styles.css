@@ -42,7 +42,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
   grid-template-columns: minmax(0, 1fr); grid-template-rows: 54px minmax(0, 1fr) 218px 44px;
   padding-bottom: env(safe-area-inset-bottom, 0px); overflow: clip;
 }
-.journey-stage { touch-action: pan-y; }
+.journey-stage, .chapter-copy, .film-region, .copy-region { touch-action: none; -webkit-user-select: none; user-select: none; }
 .site-header { grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 22px; }
 .monogram { display: inline-flex; align-items: center; min-height: 44px; font: 500 26px var(--serif); letter-spacing: -.08em; }
 .monogram span { font-style: italic; font-weight: 400; color: var(--gold); font-size: .65em; margin: 0 .14em; }

@@ -138,7 +138,7 @@ function measure() {
 }
 
 function syncScroll() {
-  if (staticMode) return;
+  if (staticMode || isTouch) return;
   expectedScrollY = Math.round(scrollStart + presented / (duration - FRAME) * scrollDistance);
   const drift = scrollY - expectedScrollY;
   if (Math.abs(drift) > SCROLL_SLACK) {
@@ -244,19 +244,17 @@ function touchSample(touches) {
   return { x, y, span, count: points.length };
 }
 
-stage.addEventListener("touchstart", event => {
+window.addEventListener("touchstart", event => {
   if (!inputAllowed(event) || event.touches.length > 2) return;
   touch = touchSample(event.touches);
   pinch = false;
   currentGestureDirection = 0;
 }, { passive: true });
 
-stage.addEventListener("touchmove", event => {
+window.addEventListener("touchmove", event => {
   if (!touch || !inputAllowed(event) || !event.touches.length || event.touches.length > 2) return;
   const next = touchSample(event.touches);
   if (next.count !== touch.count) { touch = next; return; }
-  // A two-finger parallel swipe uses the same centroid as one finger. A pinch
-  // is left to the browser so zoom remains available.
   if (next.count === 2 && Math.abs(next.span - touch.span) > 5) {
     pinch = true;
     stopPlayback();
@@ -268,19 +266,20 @@ stage.addEventListener("touchmove", event => {
     if (event.cancelable) event.preventDefault();
     currentGestureDirection = Math.sign(dy);
     receiveIntent(currentGestureDirection);
-    if (Math.abs(dy) > 12) receiveIntent(currentGestureDirection);
+    if (Math.abs(dy) > 8) receiveIntent(currentGestureDirection);
+    if (Math.abs(dy) > 20) receiveIntent(currentGestureDirection);
   }
   touch = next;
 }, { passive: false });
 
-stage.addEventListener("touchend", event => {
+window.addEventListener("touchend", event => {
   if (event.touches.length) { touch = touchSample(event.touches); return; }
   if (!pinch && currentGestureDirection) receiveIntent(currentGestureDirection);
   touch = null;
   pinch = false;
   currentGestureDirection = 0;
 }, { passive: true });
-stage.addEventListener("touchcancel", () => {
+window.addEventListener("touchcancel", () => {
   touch = null;
   pinch = false;
   currentGestureDirection = 0;
