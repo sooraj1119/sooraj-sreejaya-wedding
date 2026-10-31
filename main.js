@@ -164,6 +164,7 @@ function finishLoader() {
   loader?.classList.add("is-done");
   loader?.setAttribute("aria-busy", "false");
   status.textContent = "";
+  startAudio();
 }
 
 function inputAllowed(event) {
@@ -510,51 +511,31 @@ form.elements.name.addEventListener("input", () =>
 );
 
 // ==========================================================
-// BACKGROUND MUSIC CONTROLLER (SOORAJ & SREEJAYA WEDDING)
+// BACKGROUND MUSIC CONTROLLER (ALWAYS-ON AMBIENCE)
 // ==========================================================
 const bgm = document.querySelector("#bgm-audio");
 const audioToggle = document.querySelector("#audio-toggle");
 let isAudioPlaying = false;
-let userInteracted = false;
+let userMuted = false;
 
 function updateAudioUI(playing) {
   isAudioPlaying = playing;
   if (!audioToggle) return;
   audioToggle.classList.toggle("is-playing", playing);
-  audioToggle.setAttribute("aria-label", playing ? "Pause background music" : "Play background music");
-  audioToggle.title = playing ? "Pause Music" : "Play Music";
+  audioToggle.setAttribute("aria-label", playing ? "Mute background music" : "Play background music");
+  audioToggle.title = playing ? "Mute Music" : "Play Music";
   const text = audioToggle.querySelector(".audio-text");
-  if (text) text.textContent = playing ? "Music on" : "Music";
-}
-
-function fadeAudio(targetVolume, duration = 1000) {
-  if (!bgm) return;
-  const startVol = bgm.volume;
-  const diff = targetVolume - startVol;
-  const startTime = performance.now();
-  
-  function step(now) {
-    const elapsed = now - startTime;
-    const progress = Math.min(1, elapsed / duration);
-    bgm.volume = Math.max(0, Math.min(1, startVol + diff * progress));
-    if (progress < 1) {
-      requestAnimationFrame(step);
-    } else if (targetVolume === 0) {
-      bgm.pause();
-    }
-  }
-  requestAnimationFrame(step);
+  if (text) text.textContent = playing ? "Music on" : "Music muted";
 }
 
 function startAudio() {
-  if (!bgm) return;
-  bgm.volume = 0;
+  if (!bgm || userMuted) return;
+  bgm.volume = 0.75;
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
         updateAudioUI(true);
-        fadeAudio(0.65, 1200);
       })
       .catch(() => {
         updateAudioUI(false);
@@ -562,16 +543,14 @@ function startAudio() {
   }
 }
 
-function pauseAudio() {
-  if (!bgm) return;
-  fadeAudio(0, 500);
-  updateAudioUI(false);
-}
-
 function toggleAudio() {
+  if (!bgm) return;
   if (isAudioPlaying) {
-    pauseAudio();
+    userMuted = true;
+    bgm.pause();
+    updateAudioUI(false);
   } else {
+    userMuted = false;
     startAudio();
   }
 }
@@ -583,20 +562,24 @@ if (audioToggle) {
   });
 }
 
-// Start audio on first user gesture anywhere on the page
-function unlockAudioOnGesture() {
-  if (userInteracted) return;
-  userInteracted = true;
-  if (!isAudioPlaying) {
+// Always ensure music is playing on every interaction (scroll, click, touch, key)
+function ensureAudioAlwaysPlaying() {
+  if (!userMuted && bgm && bgm.paused) {
     startAudio();
   }
-  window.removeEventListener("pointerdown", unlockAudioOnGesture);
-  window.removeEventListener("touchstart", unlockAudioOnGesture);
-  window.removeEventListener("keydown", unlockAudioOnGesture);
-  window.removeEventListener("wheel", unlockAudioOnGesture);
 }
 
-window.addEventListener("pointerdown", unlockAudioOnGesture, { once: true, passive: true });
-window.addEventListener("touchstart", unlockAudioOnGesture, { once: true, passive: true });
-window.addEventListener("keydown", unlockAudioOnGesture, { once: true, passive: true });
-window.addEventListener("wheel", unlockAudioOnGesture, { once: true, passive: true });
+["pointerdown", "touchstart", "scroll", "wheel", "keydown", "click"].forEach((event) => {
+  window.addEventListener(event, ensureAudioAlwaysPlaying, { passive: true });
+});
+
+// Guard loop: if song ends or pauses unexpectedly, loop immediately
+if (bgm) {
+  bgm.addEventListener("ended", () => {
+    bgm.currentTime = 0;
+    if (!userMuted) bgm.play().catch(() => {});
+  });
+}
+
+// Immediate initial start attempt on load
+startAudio();
