@@ -1,4 +1,4 @@
-﻿// ?v= busts polluted CDN edge entries missing CORS headers
+// ?v= busts polluted CDN edge entries missing CORS headers
 const PREFETCH_FRAMES = 80; // ~50 frames ahead while scrolling
 const WARM_RATIO = 0.20; // download first half into HTTP cache before start
 const WARM_CONCURRENCY = 6;
@@ -236,19 +236,14 @@ export class FramePlayer {
       );
       this.resize();
 
-      // Phase 1: download ~50% of sheets into the browser cache (no decode).
-      this.onProgress?.(0.02, "Loading the film…");
-      await this.warmHalf((ratio) => {
-        // Reserve the last 8% of the bar for decoding the opening sheets.
-        this.onProgress?.(0.02 + ratio * 0.9, "Loading the film…");
-      });
-      if (this.closed) return;
-
-      // Phase 2: decode the opening window, then unlock scroll.
-      this.onProgress?.(0.94, "Almost ready…");
+      // Stream initial window immediately (<500ms start)
+      this.onProgress?.(0.5, "Preparing your journey...");
       this.pendingJump = 0;
       this.store.focus(0);
       this.store.bootstrap();
+
+      // Background stream remaining sheets into HTTP cache
+      this.warmHalf(() => {}).catch(() => {});
     } catch (error) {
       this.fail(error);
     }

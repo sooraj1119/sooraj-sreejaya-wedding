@@ -1,4 +1,4 @@
-﻿import { events } from "./wedding.js";
+import { events } from "./wedding.js";
 import { FRAMES_BASE, POSTER, SKYLINE } from "./demo-config.js";
 import { FramePlayer } from "./frame-player.js";
 
@@ -67,7 +67,7 @@ function updateHeroDepth(time) {
       `${(offsetX + (x + 0.5) * scale).toFixed(2)}px ${(offsetY + boundary[x] * scale).toFixed(2)}px`,
     );
   }
-  if (hero) hero.style.clipPath = `polygon(${points.join(",")})`;
+  if (hero) hero.style.clipPath = "none";
   const depth = clamp(time / 5, 0, 1);
   if (heroContent) heroContent.style.transform = `translateY(${-depth * 18}px) scale(${1 - depth * 0.06})`;
 }
@@ -306,7 +306,7 @@ function loadFilm() {
   loader?.classList.remove("is-done");
   loader?.setAttribute("aria-busy", "true");
   setLoadProgress(0, "Preparing your journey…");
-  staticMode = motionPreference.matches || !!connection?.saveData;
+  staticMode = false;
   document.documentElement.classList.toggle("static-journey", staticMode);
   presented = 0;
   activeChapter = -1;

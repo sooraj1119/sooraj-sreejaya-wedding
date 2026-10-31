@@ -6,7 +6,7 @@ export const events = [
     start: '2026-12-19T09:30:00+05:30',
     end: '2026-12-19T10:30:00+05:30',
     venue: 'Ponneth Temple Road, Kadavanthra',
-    note: 'Traditional Kerala Kasavu attire. Seeking elders\' and temple blessings.',
+    note: "Traditional Kerala Kasavu attire. Seeking elders' and temple blessings.",
   },
   {
     title: 'The Sacred Vows',
@@ -14,7 +14,7 @@ export const events = [
     start: '2026-12-19T11:00:00+05:30',
     end: '2026-12-19T12:00:00+05:30',
     venue: 'Kalyana Mandapam, Kadavanthra',
-    note: 'Auspicious Muhurtham: 11:00 AM – 12:00 PM. Sacred Thali tying & garland exchange.',
+    note: 'Auspicious Muhurtham: 11:00 AM - 12:00 PM. Sacred Thali tying & garland exchange.',
   },
   {
     title: 'A Royal Feast',

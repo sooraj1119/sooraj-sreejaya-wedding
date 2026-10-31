@@ -1,0 +1,21 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sooraj & Sreejaya Wedding//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:sooraj-sreejaya-wedding-20261219@wedding.com
+DTSTAMP:20261031T120000Z
+DTSTART;TZID=Asia/Kolkata:20261219T110000
+DTEND;TZID=Asia/Kolkata:20261219T150000
+SUMMARY:Sooraj & Sreejaya Wedding (Auspicious Muhurtham)
+DESCRIPTION:With the love and blessings of the Ajith Kumar and Lakshmanan families\, join us for the Auspicious Muhurtham (11:00 AM - 12:00 PM) followed by traditional Kerala Sadya.\n\nWith Best Compliments from Manjunath & Saritha.
+LOCATION:Kalyana Mandapam, Kadavanthra, Kochi, Kerala
+STATUS:CONFIRMED
+BEGIN:VALARM
+TRIGGER:-P1D
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Sooraj & Sreejaya Wedding Tomorrow!
+END:VALARM
+END:VEVENT
+END:VCALENDAR
