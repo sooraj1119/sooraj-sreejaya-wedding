@@ -152,120 +152,58 @@ function inputAllowed(event) {
 }
 
 // -------------------------------------------------------------
-// MOBILE TOUCH SWIPE & INERTIAL GESTURE ENGINE
+// HIGH-PERFORMANCE BUTTER-SMOOTH KINETIC SCROLLER (60FPS / 120FPS)
 // -------------------------------------------------------------
-let touchStartY = 0;
-let lastTouchY = 0;
-let lastTouchTime = 0;
-let touchVelocityY = 0;
-let isTouching = false;
-let inertiaRaf = 0;
+let targetTime = 0;
+let smoothTime = 0;
+let isLoopRunning = false;
 
-function handleTouchStart(e) {
-  if (e.touches.length !== 1 || !player?.ready || staticMode) return;
-  if (e.target.closest("button, a, input, select, textarea, dialog, [role='button']")) return;
-  
-  cancelAnimationFrame(inertiaRaf);
-  isTouching = true;
-  touchStartY = e.touches[0].clientY;
-  lastTouchY = touchStartY;
-  lastTouchTime = performance.now();
-  touchVelocityY = 0;
-  startAudio();
-}
-
-function handleTouchMove(e) {
-  if (!isTouching || e.touches.length !== 1) return;
-  if (e.target.closest("button, a, input, select, textarea, dialog, [role='button']")) return;
-
-  const currentY = e.touches[0].clientY;
-  const dy = currentY - lastTouchY;
-  const now = performance.now();
-  const dt = Math.max(1, now - lastTouchTime);
-
-  // Velocity in px/ms
-  touchVelocityY = -dy / dt;
-  lastTouchY = currentY;
-  lastTouchTime = now;
-
-  // Swiping up (dy < 0) advances time forward
-  // Sensitivity: comfortable ~250px swipe advances ~4 seconds of cinematic footage
-  const timeDelta = -dy * 0.022;
-  const targetTime = clamp(presented + timeDelta, 0, duration - FRAME);
-
-  presented = targetTime;
-  player.scrubTo(targetTime);
-  updateChapter(targetTime);
-
-  // Keep scrollbar and progress in sync
-  const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
-  const targetScroll = Math.round((targetTime / (duration - FRAME)) * maxScroll);
-  window.scrollTo({ top: targetScroll, behavior: "instant" });
-}
-
-function handleTouchEnd() {
-  if (!isTouching) return;
-  isTouching = false;
-
-  // Apply smooth momentum if user flicked with velocity
-  if (Math.abs(touchVelocityY) > 0.25) {
-    let vel = touchVelocityY * 16;
-    vel = Math.max(-28, Math.min(28, vel));
-
-    function glide() {
-      if (isTouching || Math.abs(vel) < 0.1) return;
-      vel *= 0.91; // smooth 9% friction per frame
-      const timeDelta = vel * 0.016 * 0.022 * 35;
-      const targetTime = clamp(presented + timeDelta, 0, duration - FRAME);
-      presented = targetTime;
-      player.scrubTo(targetTime);
-      updateChapter(targetTime);
-
-      const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
-      const targetScroll = Math.round((targetTime / (duration - FRAME)) * maxScroll);
-      window.scrollTo({ top: targetScroll, behavior: "instant" });
-
-      if (targetTime > 0 && targetTime < duration - FRAME) {
-        inertiaRaf = requestAnimationFrame(glide);
-      }
-    }
-    inertiaRaf = requestAnimationFrame(glide);
-  }
-}
-
-window.addEventListener("touchstart", handleTouchStart, { passive: true });
-window.addEventListener("touchmove", handleTouchMove, { passive: true });
-window.addEventListener("touchend", handleTouchEnd, { passive: true });
-window.addEventListener("touchcancel", () => { isTouching = false; }, { passive: true });
-
-// -------------------------------------------------------------
-// UNIFIED NATURAL SCROLL ENGINE (DESKTOP MOUSE / TRACKPAD)
-// -------------------------------------------------------------
-let scrollTicking = false;
-function onScroll() {
+function updateTargetScroll() {
   const currentScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
   if (currentScroll > 10) {
     startAudio();
   }
-  if (!player?.ready || staticMode || isTouching) return;
-  if (!scrollTicking) {
-    scrollTicking = true;
-    requestAnimationFrame(() => {
-      scrollTicking = false;
-      const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
-      const curr = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
-      const progress = Math.min(1, Math.max(0, curr / maxScroll));
-      const time = progress * (duration - FRAME);
-      presented = time;
-      player.scrubTo(time);
-      updateChapter(time);
-    });
+  if (!player?.ready || staticMode) return;
+
+  const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
+  const progress = Math.min(1, Math.max(0, currentScroll / maxScroll));
+  targetTime = progress * (duration - FRAME);
+
+  if (!isLoopRunning) {
+    isLoopRunning = true;
+    requestAnimationFrame(kineticLoop);
   }
 }
 
-window.addEventListener("scroll", onScroll, { passive: true });
-window.addEventListener("resize", measure, { passive: true });
-window.addEventListener("pageshow", measure);
+function kineticLoop() {
+  if (!player?.ready || staticMode) {
+    isLoopRunning = false;
+    return;
+  }
+
+  // Smooth exponential dampening (Lerp) for butter-smooth camera movement
+  const diff = targetTime - smoothTime;
+  if (Math.abs(diff) < 0.0006) {
+    smoothTime = targetTime;
+    presented = smoothTime;
+    player.scrubTo(smoothTime);
+    updateChapter(smoothTime);
+    isLoopRunning = false;
+    return;
+  }
+
+  smoothTime += diff * 0.22;
+  presented = smoothTime;
+  player.scrubTo(smoothTime);
+  updateChapter(smoothTime);
+
+  requestAnimationFrame(kineticLoop);
+}
+
+// Native hardware-accelerated scroll listener
+window.addEventListener('scroll', updateTargetScroll, { passive: true });
+window.addEventListener('resize', measure, { passive: true });
+window.addEventListener('pageshow', measure);
 new ResizeObserver(measure).observe(stage);
 
 function goToChapter(index) {
@@ -325,7 +263,7 @@ function loadFilm() {
     onReady(film) {
       duration = film.duration;
       finishLoader();
-      onScroll();
+      updateTargetScroll();
     },
     onError() {
       staticMode = true;
