@@ -450,6 +450,11 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .shimmer-title {
   color: #ffffff;
   text-shadow: 0 3px 28px rgba(0, 0, 0, 0.98), 0 1px 6px rgba(0, 0, 0, 0.95), 0 0 24px rgba(212, 174, 109, 0.4);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  max-width: 100%;
 }
 .shimmer-title span {
   display: inline-block;
@@ -1191,4 +1196,37 @@ dialog::backdrop {
 .itinerary-timing-badge .badge-dot {
   color: #e2c082;
   font-size: 8px;
+}
+
+
+/* --- HERO TITLE SINGLE-LINE ON MOBILE (USER REQUEST) --- */
+@media (max-width: 768px) {
+  .chapter-copy h1.shimmer-title {
+    font-size: clamp(1.75rem, 7.8vw, 3.2rem) !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: baseline !important;
+    justify-content: center !important;
+    line-height: 1.15 !important;
+    letter-spacing: -.02em !important;
+    max-width: 100% !important;
+  }
+  .chapter-copy h1.shimmer-title span {
+    white-space: nowrap !important;
+    display: inline !important;
+  }
+  .chapter-copy h1.shimmer-title em {
+    margin: 0 6px !important;
+    font-size: .68em !important;
+  }
+  .chapter-copy[data-start='0'] .hero-content {
+    padding: 22px 12px 28px !important;
+    width: 96% !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .chapter-copy h1.shimmer-title {
+    font-size: clamp(1.5rem, 7.2vw, 2.0rem) !important;
+  }
 }
