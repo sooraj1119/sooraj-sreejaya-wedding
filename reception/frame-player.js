@@ -27,7 +27,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=3.2`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=4.0`;
   }
 
   bootstrap() {
@@ -212,7 +212,7 @@ export class FramePlayer {
   async load() {
     try {
       this.onProgress?.(0, "Preparing your journey…");
-      const response = await fetch(`${this.framesBase}/manifest.json?v=3.2`, { cache: "no-store" });
+      const response = await fetch(`${this.framesBase}/manifest.json?v=4.0`, { cache: "no-store" });
       if (!response.ok) throw new Error("Frame manifest unavailable");
       const manifest = await response.json();
       if (this.closed) return;
@@ -221,7 +221,7 @@ export class FramePlayer {
       this.columns = manifest.columns;
       const coarse =
         matchMedia("(pointer: coarse)").matches || innerWidth < 900;
-      this.variant = innerWidth < 480 ? "mobile" : "desktop";
+      this.variant = "desktop"; // HD 1280x720 for all viewports for maximum clarity
       this.coarse = coarse;
       this.rate = coarse ? 1.6 : 2.2;
       this.info = manifest.variants[this.variant];
@@ -272,7 +272,7 @@ export class FramePlayer {
     this.height = Math.max(1, rect.height);
     const nativeDpr = devicePixelRatio || 1;
     const frameW = this.info?.width || this.width;
-    const dpr = Math.min(Math.max(nativeDpr, 1.5), 2.5);
+    const dpr = Math.min(Math.max(nativeDpr, 1.5), 3); // Full Retina clarity
     this.canvas.width = Math.round(this.width * dpr);
     this.canvas.height = Math.round(this.height * dpr);
     this.context.setTransform(1, 0, 0, 1, 0, 0);

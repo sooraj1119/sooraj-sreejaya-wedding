@@ -1086,7 +1086,7 @@ dialog::backdrop {
   .chapter-copy:not([data-start='0']) {
     padding-bottom: max(75px, 11svh);
   }
-  .film-events p { font-size: 14px; flex-direction: column; gap: 2px; }
+  .film-events p { font-size: 16px !important; flex-direction: row !important; justify-content: center !important; align-items: center !important; gap: 10px !important; }
   .film-events span { width: auto; font-size: 8px; }
   .chapter-caption { font-size: 10px; }
   .scroll-cue { font-size: 9px; padding: 5px 11px; }
