@@ -1,10 +1,8 @@
-// ?v= busts polluted CDN edge entries missing CORS headers
-const PREFETCH_FRAMES = 80; // ~50 frames ahead while scrolling
-const WARM_RATIO = 0.20; // download first half into HTTP cache before start
-const WARM_CONCURRENCY = 6;
+// High-Performance Zero-Lag Frame Player with LRU Cache & Background Prewarm
+const PREFETCH_FRAMES = 96; // ~16 sheets ahead
+const INITIAL_WARM_SHEETS = 12; // first 12 sheets (~72 frames) loaded before onReady
+const MAX_CACHE_SHEETS = 50; // Keep up to 50 decoded sheets in memory (~300 frames)
 
-// Bounded decoded-frame cache. Eight frames share a WebP sheet, reducing
-// request overhead without retaining the whole film in mobile memory.
 class FrameSheets {
   constructor(manifest, variant, framesBase, onLoad, onError) {
     this.framesBase = framesBase;
@@ -24,24 +22,20 @@ class FrameSheets {
     this.onLoad = onLoad;
     this.onError = onError;
     this.closed = false;
+    this.backgroundWarming = false;
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=4.0`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=5.2`;
   }
 
   bootstrap() {
-    // Decode only the near window — first-half sheets are already in HTTP cache.
     this.bootstrapEnd = this.prefetchSheets;
     this.pump();
   }
 
   clearBootstrap(atSheet) {
     if (atSheet >= this.bootstrapEnd - 1) this.bootstrapEnd = 0;
-  }
-
-  keepInCache(index) {
-    return this.wanted.includes(index) || index < this.bootstrapEnd;
   }
 
   focus(sheet, direction = 1) {
@@ -53,18 +47,34 @@ class FrameSheets {
       const idx = sheet + i * dir;
       if (idx >= 0 && idx < this.info.sheets) wanted.push(idx);
     }
-    if (wanted.join() === this.wanted.join()) return;
     this.wanted = wanted;
+    this.evictExcess();
+    this.pump();
+  }
+
+  evictExcess() {
+    if (this.cache.size <= MAX_CACHE_SHEETS) return;
     for (const [index, bitmap] of this.cache) {
-      if (!this.keepInCache(index)) {
-        bitmap.close();
+      if (!this.wanted.includes(index) && index >= this.bootstrapEnd) {
+        try { if (bitmap && typeof bitmap.close === "function") bitmap.close(); } catch {}
         this.cache.delete(index);
+        if (this.cache.size <= MAX_CACHE_SHEETS) break;
       }
     }
-    for (const [index, request] of this.loading) {
-      if (!this.keepInCache(index)) request.abort();
+  }
+
+  getClosestCached(targetSheet) {
+    if (this.cache.has(targetSheet)) return this.cache.get(targetSheet);
+    let best = null;
+    let minDiff = Infinity;
+    for (const [sheetIdx, bitmap] of this.cache) {
+      const diff = Math.abs(sheetIdx - targetSheet);
+      if (diff < minDiff && diff <= 4) {
+        minDiff = diff;
+        best = bitmap;
+      }
     }
-    this.pump();
+    return best;
   }
 
   maxConcurrent() {
@@ -101,8 +111,9 @@ class FrameSheets {
       });
       if (!response.ok) throw new Error(`Frame sheet ${response.status}`);
       const blob = await response.blob();
-      if ("createImageBitmap" in window) bitmap = await createImageBitmap(blob);
-      else {
+      if ("createImageBitmap" in window) {
+        bitmap = await createImageBitmap(blob);
+      } else {
         const url = URL.createObjectURL(blob);
         const image = new Image();
         image.src = url;
@@ -111,18 +122,12 @@ class FrameSheets {
         } finally {
           URL.revokeObjectURL(url);
         }
-        image.close = () => {
-          image.src = "";
-        };
+        image.close = () => { image.src = ""; };
         bitmap = image;
       }
-      if (
-        this.closed ||
-        controller.signal.aborted ||
-        !this.keepInCache(index)
-      )
-        bitmap.close();
-      else {
+      if (this.closed || controller.signal.aborted) {
+        try { if (bitmap && typeof bitmap.close === "function") bitmap.close(); } catch {}
+      } else {
         this.cache.set(index, bitmap);
         this.onLoad();
       }
@@ -138,10 +143,35 @@ class FrameSheets {
     }
   }
 
+  // Progressive background prewarm of all sheets into browser HTTP cache
+  startBackgroundWarm() {
+    if (this.backgroundWarming || this.closed) return;
+    this.backgroundWarming = true;
+    const total = this.info.sheets;
+    let next = INITIAL_WARM_SHEETS;
+    const concurrency = 4;
+    const runWorker = async () => {
+      while (next < total && !this.closed) {
+        const idx = next++;
+        try {
+          const resp = await fetch(this.sheetUrl(idx));
+          if (resp.ok) await resp.blob();
+        } catch {}
+        // Yield to main thread
+        await new Promise(r => setTimeout(r, 40));
+      }
+    };
+    for (let c = 0; c < concurrency; c++) {
+      runWorker();
+    }
+  }
+
   dispose() {
     this.closed = true;
     for (const request of this.loading.values()) request.abort();
-    for (const bitmap of this.cache.values()) bitmap.close();
+    for (const bitmap of this.cache.values()) {
+      try { if (bitmap && typeof bitmap.close === "function") bitmap.close(); } catch {}
+    }
     this.cache.clear();
   }
 }
@@ -168,7 +198,7 @@ export class FramePlayer {
     this.time = 0;
     this.direction = 0;
     this.coarse = matchMedia("(pointer: coarse)").matches || innerWidth < 900;
-    this.rate = this.coarse ? 3.6 : 2.2;
+    this.rate = this.coarse ? 2.5 : 2.2;
     this.boost = 1;
     this.lastIntent = 0;
     this.frame = -1;
@@ -176,6 +206,7 @@ export class FramePlayer {
     this.until = 0;
     this.lastTick = 0;
     this.pendingJump = null;
+    this.ready = false;
     if (poster) {
       this.poster = new Image();
       this.poster.src = poster;
@@ -186,8 +217,8 @@ export class FramePlayer {
     this.resize();
   }
 
-  async warmHalf(onProgress) {
-    const total = Math.max(1, Math.ceil(this.info.sheets * WARM_RATIO));
+  async warmInitial(onProgress) {
+    const total = Math.min(this.info.sheets, INITIAL_WARM_SHEETS);
     let done = 0;
     let next = 0;
     const run = async () => {
@@ -195,35 +226,28 @@ export class FramePlayer {
         const index = next++;
         try {
           const response = await fetch(this.store.sheetUrl(index));
-          if (!response.ok) throw new Error(`Warm ${response.status}`);
-          await response.blob(); // fill HTTP cache; do not decode yet
-        } catch {
-          /* Continue warming; decode path will retry failed sheets. */
-        }
+          if (response.ok) await response.blob();
+        } catch {}
         done += 1;
         onProgress?.(done / total);
       }
     };
     await Promise.all(
-      Array.from({ length: Math.min(WARM_CONCURRENCY, total) }, () => run()),
+      Array.from({ length: Math.min(6, total) }, () => run())
     );
   }
 
   async load() {
     try {
-      this.onProgress?.(0, "Preparing your journey…");
-      const response = await fetch(`${this.framesBase}/manifest.json?v=4.0`, { cache: "no-store" });
+      this.onProgress?.(0.1, "Preparing your journey...");
+      const response = await fetch(`${this.framesBase}/manifest.json?v=5.2`, { cache: "no-store" });
       if (!response.ok) throw new Error("Frame manifest unavailable");
       const manifest = await response.json();
       if (this.closed) return;
       this.fps = manifest.fps;
       this.perSheet = manifest.columns * manifest.rows;
       this.columns = manifest.columns;
-      const coarse =
-        matchMedia("(pointer: coarse)").matches || innerWidth < 900;
-      this.variant = "desktop"; // HD 1280x720 for all viewports for maximum clarity
-      this.coarse = coarse;
-      this.rate = coarse ? 1.6 : 2.2;
+      this.variant = "desktop"; // 1280x720 HD frames across all devices
       this.info = manifest.variants[this.variant];
       this.duration = this.info.count / this.fps;
       this.end = (this.info.count - 1) / this.fps;
@@ -236,17 +260,33 @@ export class FramePlayer {
       );
       this.resize();
 
-      // Stream initial window immediately (<500ms start)
-      this.onProgress?.(0.5, "Preparing your journey...");
-      this.pendingJump = 0;
-      this.store.focus(0);
-      this.store.bootstrap();
+      this.onProgress?.(0.3, "Loading memories...");
+      await this.warmInitial((ratio) => {
+        this.onProgress?.(0.3 + ratio * 0.6, "Loading memories...");
+      });
 
-      // Background stream remaining sheets into HTTP cache
-      this.warmHalf(() => {}).catch(() => {});
+      this.store.bootstrap();
+      await this.waitForInitialFrame();
+      this.ready = true;
+      this.onProgress?.(1, "");
+      this.onReady?.({ duration: this.duration, fps: this.fps });
+      
+      // Immediately kick off background caching of remaining sheets
+      this.store.startBackgroundWarm();
     } catch (error) {
       this.fail(error);
     }
+  }
+
+  waitForInitialFrame() {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (this.closed) return resolve();
+        if (this.drawFrame(0, true)) resolve();
+        else setTimeout(check, 30);
+      };
+      check();
+    });
   }
 
   onSheet() {
@@ -255,34 +295,8 @@ export class FramePlayer {
       if (this.drawFrame(index)) {
         this.time = this.pendingJump;
         this.pendingJump = null;
-        if (!this.ready) {
-          this.ready = true;
-          this.onProgress?.(1, "");
-          this.onReady(this);
-        }
-        this.onFrame?.(this.time);
       }
     }
-    this.wake();
-  }
-
-  resize() {
-    const rect = this.canvas.getBoundingClientRect();
-    this.width = Math.max(1, rect.width);
-    this.height = Math.max(1, rect.height);
-    const nativeDpr = devicePixelRatio || 1;
-    const frameW = this.info?.width || this.width;
-    const dpr = Math.min(Math.max(nativeDpr, 1.5), 3); // Full Retina clarity
-    this.canvas.width = Math.round(this.width * dpr);
-    this.canvas.height = Math.round(this.height * dpr);
-    this.context.setTransform(1, 0, 0, 1, 0, 0);
-    this.context.scale(dpr, dpr);
-    this.drawWidth = this.width;
-    this.drawHeight = this.height;
-    this.context.imageSmoothingEnabled = true;
-    this.context.imageSmoothingQuality = "high";
-    if (this.frame >= 0 && this.store) this.drawFrame(this.frame, true);
-    else this.drawPoster();
   }
 
   drawPoster() {
@@ -294,6 +308,25 @@ export class FramePlayer {
       this.poster.naturalWidth,
       this.poster.naturalHeight,
     );
+  }
+
+  resize() {
+    const rect = this.canvas.getBoundingClientRect();
+    this.width = Math.max(1, rect.width);
+    this.height = Math.max(1, rect.height);
+    const nativeDpr = window.devicePixelRatio || 1;
+    // Support up to 3x Retina DPR for crisp display
+    const dpr = Math.min(Math.max(nativeDpr, 1.5), 3);
+    this.canvas.width = Math.round(this.width * dpr);
+    this.canvas.height = Math.round(this.height * dpr);
+    this.context.setTransform(1, 0, 0, 1, 0, 0);
+    this.context.scale(dpr, dpr);
+    this.drawWidth = this.width;
+    this.drawHeight = this.height;
+    this.context.imageSmoothingEnabled = true;
+    this.context.imageSmoothingQuality = "high";
+    if (this.frame >= 0 && this.store) this.drawFrame(this.frame, true);
+    else this.drawPoster();
   }
 
   drawImage(image, sx, sy, width, height) {
@@ -318,19 +351,17 @@ export class FramePlayer {
   drawFrame(index, force = false) {
     if (!force && index === this.frame) return true;
     const sheet = Math.floor(index / this.perSheet);
-    const bitmap = this.store.cache.get(sheet);
-    if (!bitmap) return false;
+    let bitmap = this.store.cache.get(sheet);
+    if (!bitmap) {
+      bitmap = this.store.getClosestCached(sheet);
+      if (!bitmap) return false;
+    }
 
-    // Self-healing / defensive layout validation
+    // Defensive grid geometry calculation
     if (bitmap.width && bitmap.height) {
       if (bitmap.width === 3840 && bitmap.height === 1440) {
         this.info.width = 1280;
         this.info.height = 720;
-        this.columns = 3;
-        this.perSheet = 6;
-      } else if (bitmap.width === 2562 && bitmap.height === 960) {
-        this.info.width = 854;
-        this.info.height = 480;
         this.columns = 3;
         this.perSheet = 6;
       } else {
@@ -353,77 +384,8 @@ export class FramePlayer {
     this.canvas.dataset.frame = String(index);
     this.canvas.dataset.time = String(index / this.fps);
     this.canvas.dataset.cachedSheets = String(this.store.cache.size);
-    this.status.textContent = "";
-    this.waitSince = 0;
-    this.onFrame(index / this.fps);
+    this.onFrame?.(index / this.fps);
     return true;
-  }
-
-  intent(direction, grace = 550) {
-    if (!this.ready || this.closed) return;
-    const sheet = Math.floor((this.time * this.fps) / this.perSheet);
-    this.store?.clearBootstrap(sheet);
-    if (this.direction !== direction) this.lastTick = 0;
-    const now = performance.now();
-    if (now - this.lastIntent < 90)
-      this.boost = Math.min(1.75, this.boost + 0.2);
-    else this.boost = 1;
-    this.lastIntent = now;
-    this.direction = direction;
-    this.until = performance.now() + grace;
-    this.canvas.dataset.playing = "true";
-    this.store.focus(
-      Math.floor((this.time * this.fps) / this.perSheet),
-      direction,
-    );
-    this.wake();
-  }
-
-  wake() {
-    if (!this.raf && this.direction && !document.hidden && !this.closed) {
-      this.raf = requestAnimationFrame((now) => this.tick(now));
-    }
-  }
-
-  tick(now) {
-    this.raf = 0;
-    if (!this.direction || document.hidden || now >= this.until) {
-      this.stop();
-      return;
-    }
-    const dt = this.lastTick ? Math.min((now - this.lastTick) / 1000, 0.06) : 0;
-    this.lastTick = now;
-    const next = Math.max(
-      0,
-      Math.min(
-        this.end,
-        this.time + this.direction * this.rate * this.boost * dt,
-      ),
-    );
-    const index = Math.round(next * this.fps);
-    this.store.focus(Math.floor(index / this.perSheet), this.direction);
-    if (this.drawFrame(index)) this.time = next;
-    else {
-      if (!this.waitSince) this.waitSince = now;
-      if (now - this.waitSince > 400)
-        this.status.textContent = "Loading the next moment…";
-    }
-    const atBoundary =
-      (this.direction < 0 && next === 0) ||
-      (this.direction > 0 && next === this.end);
-    if (atBoundary && index === this.frame) this.stop();
-    else this.wake();
-  }
-
-  stop() {
-    this.direction = 0;
-    this.until = 0;
-    this.lastTick = 0;
-    this.boost = 1;
-    cancelAnimationFrame(this.raf);
-    this.raf = 0;
-    this.canvas.dataset.playing = "false";
-    this.status.textContent = "";
   }
 
   scrubTo(time) {
@@ -442,11 +404,7 @@ export class FramePlayer {
   }
 
   seek(time) {
-    this.stop();
     if (!this.store) return;
-    this.store.clearBootstrap(
-      Math.floor((Math.max(0, Math.min(this.end, time)) * this.fps) / this.perSheet),
-    );
     this.pendingJump = Math.max(0, Math.min(this.end, time));
     const index = Math.round(this.pendingJump * this.fps);
     this.store.focus(Math.floor(index / this.perSheet));
@@ -455,12 +413,10 @@ export class FramePlayer {
 
   fail(error) {
     if (this.closed) return;
-    this.stop();
-    this.onError(error);
+    this.onError?.(error);
   }
 
   dispose() {
-    this.stop();
     this.closed = true;
     this.store?.dispose();
   }

@@ -359,13 +359,12 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 80px clamp(18px, 6vw, 80px) 90px;
+  padding: 60px clamp(16px, 5vw, 60px) 70px;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
-  transform: translate3d(0, 16px, 0);
-  -webkit-transform: translate3d(0, 16px, 0);
+  transform: translate3d(0, 14px, 0);
+  -webkit-transform: translate3d(0, 14px, 0);
   will-change: opacity, transform;
   backface-visibility: hidden;
   isolation: isolate;
@@ -407,14 +406,14 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
   align-items: center;
   text-align: center;
   width: 100%;
-  max-width: 640px;
-  background: rgba(14, 12, 10, 0.72);
+  max-width: 480px;
+  background: rgba(10, 8, 7, 0.65);
   border: 1px solid rgba(226, 192, 130, 0.35);
-  border-radius: 16px;
-  padding: 24px 34px;
+  border-radius: 18px;
+  padding: 16px 24px;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.7), inset 0 0 24px rgba(226, 192, 130, 0.06);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.65), inset 0 0 16px rgba(226, 192, 130, 0.06);
   pointer-events: none;
 }
 .chapter-card a, .chapter-card button, .chapter-card input, .chapter-card select, .chapter-card textarea { pointer-events: auto; }
@@ -1228,5 +1227,52 @@ dialog::backdrop {
 @media (max-width: 380px) {
   .chapter-copy h1.shimmer-title {
     font-size: clamp(1.5rem, 7.2vw, 2.0rem) !important;
+  }
+}
+
+
+/* Dock cards cleanly at bottom edge leaving couple and scene unobstructed */
+.chapter-copy:not([data-start='0']) {
+  justify-content: flex-end !important;
+  padding-bottom: max(20px, 3.5svh) !important;
+}
+
+.chapter-copy[data-start='0'] .hero-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 660px;
+  background: radial-gradient(ellipse 90% 85% at 50% 50%, rgba(10, 8, 7, 0.70) 0%, rgba(10, 8, 7, 0.48) 60%, rgba(10, 8, 7, 0.12) 100%);
+  padding: 18px 22px 24px;
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+@media (max-width: 768px) {
+  .chapter-copy:not([data-start='0']) {
+    padding-bottom: max(16px, 2.8svh) !important;
+  }
+  .chapter-card {
+    max-width: 92vw !important;
+    padding: 14px 18px !important;
+    border-radius: 16px !important;
+  }
+  .chapter-copy h2 {
+    font-size: clamp(1.5rem, 5.2vw, 2.2rem) !important;
+    margin-bottom: 4px !important;
+  }
+  .lineage-grid {
+    gap: 8px !important;
+    margin-top: 6px !important;
+  }
+  .lineage-side p {
+    margin: 1px 0 !important;
+  }
+  .film-events {
+    margin-top: 10px !important;
+    gap: 6px !important;
   }
 }

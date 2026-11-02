@@ -40,56 +40,96 @@ function updateHeroDepth(time) {
   if (heroContent) heroContent.style.transform = `translateY(${-depth * 18}px) scale(${1 - depth * 0.05})`;
 }
 
+// Discrete non-overlapping chapter timeline windows with dedicated pure video breathing intervals
+const CHAPTER_TIMELINES = [
+  { start: 0.0,  end: 4.8,  fadeIn: 0.0,  fadeOut: 4.2 },  // Chapter 1: The beginning
+  { start: 5.5,  end: 10.8, fadeIn: 6.0,  fadeOut: 10.2 }, // Chapter 2: The union
+  { start: 11.5, end: 16.8, fadeIn: 12.0, fadeOut: 16.2 }, // Chapter 3: The evening
+  { start: 17.5, end: 22.8, fadeIn: 18.0, fadeOut: 22.2 }, // Chapter 4: The gathering
+  { start: 23.5, end: 26.8, fadeIn: 24.0, fadeOut: 26.2 }, // Chapter 5: The blessings
+  { start: 27.5, end: 30.5, fadeIn: 28.0, fadeOut: 30.5 }, // Chapter 6: The celebration
+];
+
 function updateChapter(time) {
-  const index = staticMode
-    ? 0
-    : Math.max(
-        0,
-        starts.findLastIndex((start) => time >= start),
-      );
-  if (index !== activeChapter) {
+  if (staticMode) {
     copies.forEach((copy, i) => {
-      copy.classList.toggle("is-active", i === index);
-      copy.setAttribute("aria-hidden", String(i !== index));
-      copy.inert = i !== index;
-      if (i !== index) copy.style.opacity = "0";
+      copy.classList.toggle("is-active", i === 0);
+      copy.style.opacity = i === 0 ? "1" : "0";
+      copy.style.visibility = i === 0 ? "visible" : "hidden";
+      copy.style.pointerEvents = i === 0 ? "auto" : "none";
     });
-    chapterButtons.forEach((button, i) => {
-      if (i === index) button.setAttribute("aria-current", "step");
-      else button.removeAttribute("aria-current");
-    });
-    const numEl = $("#chapter-number");
-    const nameEl = $("#chapter-name");
-    if (numEl) numEl.textContent = String(index + 1).padStart(2, "0");
-    if (nameEl && copies[index]) nameEl.textContent = copies[index].dataset.name;
-    activeChapter = index;
-    const nextChapter = $("#next-chapter");
-    if (nextChapter) {
-      nextChapter.firstChild.textContent = staticMode
-        ? "The celebrations "
-        : index === 5
-          ? "Back to the beginning "
-          : "Scroll to unfold ";
-      const arrow = nextChapter.querySelector("span");
-      if (arrow) arrow.innerHTML = index === 5 ? "&larr;" : "&rarr;";
+    return;
+  }
+
+  // Determine current active chapter index
+  let currentIndex = -1;
+  for (let i = 0; i < CHAPTER_TIMELINES.length; i++) {
+    const t = CHAPTER_TIMELINES[i];
+    if (time >= t.start && time <= t.end) {
+      currentIndex = i;
+      break;
     }
   }
 
-  // Fade around scene boundaries (0.45s quick fade for high readability)
-  const fadeIn = index === 0 ? 1 : clamp((time - starts[index]) / 0.45, 0, 1);
-  const fadeOut =
-    index === copies.length - 1
-      ? 1
-      : clamp((starts[index + 1] - time) / 0.45, 0, 1);
-  const alpha = staticMode ? 1 : Math.min(fadeIn, fadeOut);
-  if (copies[index]) {
-    copies[index].style.opacity = String(alpha * alpha * (3 - 2 * alpha));
+  // Update navigation headers and active step badges
+  if (currentIndex !== -1 && currentIndex !== activeChapter) {
+    activeChapter = currentIndex;
+    const numEl = $("#chapter-number");
+    const nameEl = $("#chapter-name");
+    if (numEl) numEl.textContent = String(currentIndex + 1).padStart(2, "0");
+    if (nameEl && copies[currentIndex]) nameEl.textContent = copies[currentIndex].dataset.name;
+    chapterButtons.forEach((button, i) => {
+      if (i === currentIndex) button.setAttribute("aria-current", "step");
+      else button.removeAttribute("aria-current");
+    });
+    const nextChapter = $("#next-chapter");
+    if (nextChapter) {
+      nextChapter.firstChild.textContent = currentIndex === 5 ? "Back to top " : "Scroll to unfold ";
+      const arrow = nextChapter.querySelector("span");
+      if (arrow) arrow.innerHTML = currentIndex === 5 ? "&uarr;" : "&rarr;";
+    }
   }
+
+  // Calculate precise, non-overlapping opacity for each chapter
+  copies.forEach((copy, i) => {
+    const t = CHAPTER_TIMELINES[i];
+    let alpha = 0;
+    if (time >= t.start && time <= t.end) {
+      if (time < t.fadeIn) {
+        alpha = clamp((time - t.start) / Math.max(0.01, t.fadeIn - t.start), 0, 1);
+      } else if (time > t.fadeOut && t.fadeOut < t.end) {
+        alpha = clamp((t.end - time) / Math.max(0.01, t.end - t.fadeOut), 0, 1);
+      } else {
+        alpha = 1;
+      }
+    }
+
+    // Smooth cubic easing for alpha
+    const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
+
+    if (smoothAlpha > 0.005) {
+      copy.classList.add("is-active");
+      copy.removeAttribute("aria-hidden");
+      copy.inert = false;
+      copy.style.opacity = smoothAlpha.toFixed(3);
+      copy.style.visibility = "visible";
+      copy.style.pointerEvents = "auto";
+      const translateY = ((1 - smoothAlpha) * 14).toFixed(1);
+      copy.style.transform = `translate3d(0, ${translateY}px, 0)`;
+    } else {
+      copy.classList.remove("is-active");
+      copy.setAttribute("aria-hidden", "true");
+      copy.inert = true;
+      copy.style.opacity = "0";
+      copy.style.visibility = "hidden";
+      copy.style.pointerEvents = "none";
+    }
+  });
+
   updateHeroDepth(time);
   const progressFill = $("#progress-fill");
   if (progressFill) {
-    progressFill.style.transform =
-      `scaleX(${staticMode ? 0 : clamp(time / (duration - FRAME), 0, 1)})`;
+    progressFill.style.transform = `scaleX(${clamp(time / (duration - FRAME), 0, 1)})`;
   }
 }
 
@@ -151,7 +191,7 @@ function kineticLoop() {
 
   const diff = targetTime - smoothTime;
   if (Math.abs(diff) > 0.0005) {
-    smoothTime += diff * 0.24;
+    smoothTime += diff * 0.45;
     player.scrubTo(smoothTime);
     updateChapter(smoothTime);
     requestAnimationFrame(kineticLoop);
@@ -747,3 +787,5 @@ if (bgm) {
     bgm.play().catch(() => {});
   });
 }
+window.updateChapter = updateChapter;
+window.player = player;
