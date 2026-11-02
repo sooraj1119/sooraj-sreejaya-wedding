@@ -1,0 +1,19 @@
+{
+  "fps": 24,
+  "columns": 3,
+  "rows": 2,
+  "variants": {
+    "mobile": {
+      "width": 854,
+      "height": 480,
+      "count": 720,
+      "sheets": 120
+    },
+    "desktop": {
+      "width": 1280,
+      "height": 720,
+      "count": 720,
+      "sheets": 120
+    }
+  }
+}

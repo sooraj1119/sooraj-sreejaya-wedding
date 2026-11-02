@@ -1,0 +1,16 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sooraj and Sreejaya Wedding Reception//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:sooraj-sreejaya-reception-20261223@wedding
+DTSTAMP:20261101T000000Z
+DTSTART:20261223T133000Z
+DTEND:20261223T163000Z
+SUMMARY:Wedding Reception - Sooraj & Sreejaya
+DESCRIPTION:Wedding Reception of Sooraj & Sreejaya. Grand Entrance at 7:00 PM, Cake Cutting, and Dinner (7:00 PM - 10:00 PM).
+LOCATION:Trinita Casa Events & Banquet, Behind Amrita Vishwa Vidyapeetham, St. James Road, North, Edappally, Kochi, Kerala
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
