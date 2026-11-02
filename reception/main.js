@@ -41,13 +41,13 @@ function updateHeroDepth(time) {
 }
 
 // Discrete non-overlapping chapter timeline windows with dedicated pure video breathing intervals
+// Discrete non-overlapping chapter timeline windows with dedicated pure video breathing intervals (5 Chapters)
 const CHAPTER_TIMELINES = [
-  { start: 0.0,  end: 4.8,  fadeIn: 0.0,  fadeOut: 4.2 },  // Chapter 1: The beginning
-  { start: 5.5,  end: 10.8, fadeIn: 6.0,  fadeOut: 10.2 }, // Chapter 2: The union
-  { start: 11.5, end: 16.8, fadeIn: 12.0, fadeOut: 16.2 }, // Chapter 3: The evening
-  { start: 17.5, end: 22.8, fadeIn: 18.0, fadeOut: 22.2 }, // Chapter 4: The gathering
-  { start: 23.5, end: 26.8, fadeIn: 24.0, fadeOut: 26.2 }, // Chapter 5: The blessings
-  { start: 27.5, end: 30.5, fadeIn: 28.0, fadeOut: 30.5 }, // Chapter 6: The celebration
+  { start: 0.0,  end: 5.0,  fadeIn: 0.0,  fadeOut: 4.4 },  // Chapter 1: The beginning
+  { start: 5.8,  end: 11.4, fadeIn: 6.4,  fadeOut: 10.8 }, // Chapter 2: The union
+  { start: 12.2, end: 18.0, fadeIn: 12.8, fadeOut: 17.4 }, // Chapter 3: The gathering
+  { start: 18.8, end: 24.2, fadeIn: 19.4, fadeOut: 23.6 }, // Chapter 4: The blessings
+  { start: 25.0, end: 30.5, fadeIn: 25.6, fadeOut: 30.5 }, // Chapter 5: The celebration
 ];
 
 function updateChapter(time) {
@@ -84,9 +84,9 @@ function updateChapter(time) {
     });
     const nextChapter = $("#next-chapter");
     if (nextChapter) {
-      nextChapter.firstChild.textContent = currentIndex === 5 ? "Back to top " : "Scroll to unfold ";
+      nextChapter.firstChild.textContent = currentIndex === (copies.length - 1) ? "Back to top " : "Scroll to unfold ";
       const arrow = nextChapter.querySelector("span");
-      if (arrow) arrow.innerHTML = currentIndex === 5 ? "&uarr;" : "&rarr;";
+      if (arrow) arrow.innerHTML = currentIndex === (copies.length - 1) ? "&uarr;" : "&rarr;";
     }
   }
 
@@ -216,13 +216,18 @@ function goToChapter(index) {
   const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
   const targetT = index >= copies.length || index === 0 ? 0 : Math.min(starts[index] + 1.0, duration - FRAME);
   const targetScroll = Math.round((targetT / (duration - FRAME)) * maxScroll);
+  targetTime = targetT;
+  if (!isLoopRunning && player?.ready) {
+    isLoopRunning = true;
+    requestAnimationFrame(kineticLoop);
+  }
   window.scrollTo({ top: targetScroll, behavior: "smooth" });
 }
 
 chapterButtons.forEach(button =>
   button.addEventListener("click", () => goToChapter(Number(button.dataset.chapter)))
 );
-$("#next-chapter")?.addEventListener("click", () => goToChapter(activeChapter >= 5 ? 0 : activeChapter + 1));
+$("#next-chapter")?.addEventListener("click", () => goToChapter(activeChapter >= (copies.length - 1) ? 0 : activeChapter + 1));
 
 // Keyboard navigation
 window.addEventListener("keydown", event => {
