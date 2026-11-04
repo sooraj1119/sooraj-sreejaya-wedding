@@ -6,14 +6,14 @@
     "mobile": {
       "width": 1280,
       "height": 720,
-      "count": 720,
-      "sheets": 120
+      "count": 480,
+      "sheets": 80
     },
     "desktop": {
       "width": 1280,
       "height": 720,
-      "count": 720,
-      "sheets": 120
+      "count": 480,
+      "sheets": 80
     }
   }
 }

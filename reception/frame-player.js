@@ -26,7 +26,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=5.2`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=6.0`;
   }
 
   bootstrap() {
@@ -151,8 +151,9 @@ class FrameSheets {
     let next = INITIAL_WARM_SHEETS;
     const concurrency = 4;
     const runWorker = async () => {
-      while (next < total && !this.closed) {
+      while (!this.closed) {
         const idx = next++;
+        if (idx >= total) break;
         try {
           const resp = await fetch(this.sheetUrl(idx));
           if (resp.ok) await resp.blob();
@@ -222,8 +223,9 @@ export class FramePlayer {
     let done = 0;
     let next = 0;
     const run = async () => {
-      while (next < total && !this.closed) {
+      while (!this.closed) {
         const index = next++;
+        if (index >= total) break;
         try {
           const response = await fetch(this.store.sheetUrl(index));
           if (response.ok) await response.blob();
@@ -240,7 +242,7 @@ export class FramePlayer {
   async load() {
     try {
       this.onProgress?.(0.1, "Preparing your journey...");
-      const response = await fetch(`${this.framesBase}/manifest.json?v=5.2`, { cache: "no-store" });
+      const response = await fetch(`${this.framesBase}/manifest.json?v=6.0`, { cache: "no-store" });
       if (!response.ok) throw new Error("Frame manifest unavailable");
       const manifest = await response.json();
       if (this.closed) return;
