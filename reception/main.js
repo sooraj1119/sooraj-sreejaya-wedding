@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=6.0";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=6.0";
-import { FramePlayer } from "./frame-player.js?v=6.0";
+﻿import { events } from "./wedding.js?v=6.1";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=6.1";
+import { FramePlayer } from "./frame-player.js?v=6.1";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -40,13 +40,11 @@ function updateHeroDepth(time) {
   if (heroContent) heroContent.style.transform = `translateY(${-depth * 18}px) scale(${1 - depth * 0.05})`;
 }
 
-// Discrete non-overlapping chapter timeline windows for 20.0s celebration video (5 Chapters)
+// Discrete non-overlapping chapter timeline windows for 20.0s celebration video (3 Chapters)
 const CHAPTER_TIMELINES = [
-  { start: 0.0,  end: 3.5,  fadeIn: 0.0,  fadeOut: 3.0 },  // Chapter 1: The beginning (Ballroom dance)
-  { start: 4.2,  end: 7.8,  fadeIn: 4.7,  fadeOut: 7.3 },  // Chapter 2: The union (Gazing together)
-  { start: 8.5,  end: 12.2, fadeIn: 9.0,  fadeOut: 11.7 }, // Chapter 3: The gathering (Close-up smiles & petals)
-  { start: 12.9, end: 16.2, fadeIn: 13.4, fadeOut: 15.7 }, // Chapter 4: The blessings (Walking hand-in-hand)
-  { start: 16.9, end: 20.5, fadeIn: 17.4, fadeOut: 20.5 }, // Chapter 5: The celebration (Palace gates & RSVP)
+  { start: 0.0,  end: 5.5,  fadeIn: 0.0,  fadeOut: 4.8 },  // Chapter 1: The beginning (Ballroom dance)
+  { start: 6.8,  end: 12.8, fadeIn: 7.6,  fadeOut: 12.0 }, // Chapter 2: The union (Gazing together & close-up)
+  { start: 14.0, end: 20.5, fadeIn: 14.8, fadeOut: 20.5 }, // Chapter 3: The celebration (Walking together, Sourav compliments & RSVP)
 ];
 
 function updateChapter(time) {
@@ -213,7 +211,7 @@ function goToChapter(index) {
   }
   startAudio();
   const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
-  const targetT = index >= copies.length || index === 0 ? 0 : Math.min(starts[index] + 0.8, duration - FRAME);
+  const targetT = index >= copies.length || index === 0 ? 0 : Math.min(starts[index] + 1.0, duration - FRAME);
   const targetScroll = Math.round((targetT / (duration - FRAME)) * maxScroll);
   targetTime = targetT;
   if (!isLoopRunning && player?.ready) {

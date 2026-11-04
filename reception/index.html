@@ -14,8 +14,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   
   <link rel="preload" as="image" href="poster.jpg?v=4.0" />
-  <link rel="stylesheet" href="styles.css?v=6.0" />
-  <script type="module" src="main.js?v=6.0"></script>
+  <link rel="stylesheet" href="styles.css?v=6.1" />
+  <script type="module" src="main.js?v=6.1"></script>
 </head>
 <body>
   <!-- Film Loader -->
@@ -89,7 +89,7 @@
           </article>
 
           <!-- Chapter 2: The Union (Groom & Bride Details) -->
-          <article class="chapter-copy" data-start="4.2" data-name="The union" aria-hidden="true" inert>
+          <article class="chapter-copy" data-start="6.8" data-name="The union" aria-hidden="true" inert>
             <div class="chapter-card">
               <div class="card-motif" aria-hidden="true">&#10087; &#10048; &#10087;</div>
               <p class="eyebrow">United in Love, Devotion &amp; Tradition</p>
@@ -110,36 +110,8 @@
             </div>
           </article>
 
-          <!-- Chapter 3: The Gathering (Reception Program) -->
-          <article class="chapter-copy" data-start="8.5" data-name="The gathering" aria-hidden="true" inert>
-            <div class="chapter-card program-card">
-              <div class="card-motif" aria-hidden="true">&#10087; &#10048; &#10087;</div>
-              <p class="eyebrow">Reception Itinerary &bull; 23 December 2026</p>
-              <h2>An evening<br /><em>planned for you.</em></h2>
-              <div class="film-events">
-                <p><span class="event-bullet" aria-hidden="true">&#10022;</span> <strong>Grand Entrance</strong></p>
-                <p><span class="event-bullet" aria-hidden="true">&#10022;</span> <strong>Cake Cutting</strong></p>
-                <p><span class="event-bullet" aria-hidden="true">&#10022;</span> <strong>Dinner</strong></p>
-              </div>
-            </div>
-          </article>
-
-          <!-- Chapter 4: Blessings & Compliments -->
-          <article class="chapter-copy" data-start="12.9" data-name="The blessings" aria-hidden="true" inert>
-            <div class="chapter-card">
-              <div class="card-motif" aria-hidden="true">&#10087; &#10048; &#10087;</div>
-              <p class="eyebrow">With Warmth &amp; Affection</p>
-              <h2>Surrounded by love,<br /><em>blessed by all.</em></h2>
-              <div class="compliments-box">
-                <span class="compliments-label">With Best Compliments From</span>
-                <strong class="compliments-name">Sourav</strong>
-                <p class="compliments-sub">Together with beloved family members, dear relatives, and cherished friends.</p>
-              </div>
-            </div>
-          </article>
-
-          <!-- Chapter 5: An Invitation to Join -->
-          <article class="chapter-copy" data-start="16.9" data-name="The celebration" aria-hidden="true" inert>
+          <!-- Chapter 3: An Invitation to Join -->
+          <article class="chapter-copy" data-start="14.0" data-name="The celebration" aria-hidden="true" inert>
             <div class="chapter-card final-card">
               <div class="card-motif" aria-hidden="true">&#10087; &#10048; &#10087;</div>
               <p class="eyebrow">We Await Your Gracious Presence</p>
@@ -148,6 +120,10 @@
                 Wednesday, 23rd December 2026 &bull; 7:00 PM &ndash; 10:00 PM<br />
                 Trinita Casa Events &amp; Banquet, Behind Amrita Vishwa Vidyapeetham, St. James Road, North, Edappally, Kochi
               </p>
+              <div class="compliments-box">
+                <span class="compliments-label">With Best Compliments From</span>
+                <strong class="compliments-name">Sourav</strong>
+              </div>
               <div class="action-buttons-group">
                 <button class="action-pill" type="button" data-open-celebrations>View Evening Schedule &rarr;</button>
                 <button class="action-pill-accent" type="button" data-open-rsvp>Share Your RSVP &rarr;</button>
@@ -160,9 +136,7 @@
         <nav class="chapter-nav" aria-label="Journey chapters">
           <button data-chapter="0" aria-label="The beginning" aria-current="step"><span>01</span><i></i></button>
           <button data-chapter="1" aria-label="The union"><span>02</span><i></i></button>
-          <button data-chapter="2" aria-label="The gathering"><span>03</span><i></i></button>
-          <button data-chapter="3" aria-label="The blessings"><span>04</span><i></i></button>
-          <button data-chapter="4" aria-label="The celebration"><span>05</span><i></i></button>
+          <button data-chapter="2" aria-label="The celebration"><span>03</span><i></i></button>
         </nav>
 
         <!-- Journey Footer -->
@@ -178,10 +152,6 @@
     </section>
 
     <!-- Audio activation prompt if browser blocks initial autoplay -->
-    <div id="audio-prompt" class="audio-prompt" role="button" tabindex="0">
-      <span class="music-icon" aria-hidden="true">&#9835;</span>
-      <span>Click anywhere to play celebration music</span>
-    </div>
   </main>
 
   <!-- Celebrations / Full Details Modal Dialog -->
