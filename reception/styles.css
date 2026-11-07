@@ -1376,3 +1376,212 @@ dialog::backdrop {
     max-width: 320px !important;
   }
 }
+
+
+/* ==========================================================
+   HIGH-CONTRAST LUXURY LETTERPRESS & PEARL CARDS (READABLE EVERYWHERE)
+   ========================================================== */
+
+/* Position Hero text in the palace upper archway so couple is completely unobstructed */
+.chapter-copy[data-start='0'] {
+  justify-content: flex-start !important;
+  padding-top: clamp(72px, 9.5vh, 110px) !important;
+}
+
+.hero-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 680px;
+  background: radial-gradient(ellipse 85% 75% at 50% 42%, rgba(255, 252, 246, 0.68) 0%, rgba(255, 252, 246, 0.42) 55%, rgba(255, 252, 246, 0.0) 100%) !important;
+  border-radius: 32px !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 12px 14px 16px !important;
+}
+
+.chapter-copy h1, .chapter-copy h1 span {
+  color: #120e0a !important;
+  font-weight: 600 !important;
+  text-shadow: 0 0 2px #fff, 0 1px 16px rgba(255, 255, 255, 0.95), 0 0 32px rgba(255, 248, 230, 0.85) !important;
+}
+.chapter-copy h1 em {
+  color: #946313 !important;
+  font-style: italic !important;
+}
+.royal-crest {
+  color: #946313 !important;
+  text-shadow: 0 0 10px #fff !important;
+  margin-bottom: 2px !important;
+}
+.eyebrow, .hero-kicker {
+  color: #4a320e !important;
+  font-weight: 800 !important;
+  letter-spacing: .22em !important;
+  text-shadow: 0 0 12px #fff, 0 0 20px rgba(255, 255, 255, 0.9) !important;
+  margin-bottom: 2px !important;
+}
+.copy-note, .hero-sub {
+  color: #1e160e !important;
+  font-weight: 600 !important;
+  text-shadow: 0 0 12px #fff, 0 0 20px rgba(255, 255, 255, 0.9) !important;
+}
+.hero-date {
+  display: inline-flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  margin-top: 10px !important;
+  padding: 4px 12px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  text-align: center !important;
+  max-width: 100% !important;
+}
+.hero-date-val {
+  color: #120e0a !important;
+  font-weight: 800 !important;
+  text-shadow: 0 0 12px #fff, 0 0 20px rgba(255, 255, 255, 0.95) !important;
+  white-space: nowrap !important;
+}
+.hero-time-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  padding: 3px 14px !important;
+  background: rgba(255, 252, 245, 0.95) !important;
+  border: 1.5px solid #a8761e !important;
+  border-radius: 999px !important;
+  box-shadow: 0 4px 18px rgba(30, 20, 10, 0.20), 0 0 14px rgba(212, 175, 55, 0.35) !important;
+}
+.hero-time-icon {
+  font-size: 13px !important;
+  line-height: 1 !important;
+  filter: none !important;
+}
+.hero-time-text {
+  color: #120e0a !important;
+  font-weight: 800 !important;
+  text-shadow: none !important;
+  white-space: nowrap !important;
+}
+.hero-date-venue {
+  color: #1a120b !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 12px #fff, 0 0 20px rgba(255, 255, 255, 0.95) !important;
+  margin-top: 2px !important;
+  white-space: nowrap !important;
+}
+
+/* Chapter Cards (Union & Celebration): Luxury Ivory Pearl Glass */
+.chapter-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  max-width: 500px;
+  background: rgba(255, 252, 245, 0.92) !important;
+  border: 1.5px solid rgba(168, 118, 30, 0.55) !important;
+  border-radius: 20px !important;
+  padding: 16px 22px !important;
+  backdrop-filter: blur(22px) !important;
+  -webkit-backdrop-filter: blur(22px) !important;
+  box-shadow: 0 18px 50px rgba(20, 15, 10, 0.38), inset 0 0 24px rgba(255, 255, 255, 0.85) !important;
+}
+.card-motif {
+  color: #946313 !important;
+  text-shadow: none !important;
+}
+.chapter-card .eyebrow {
+  color: #734d11 !important;
+  text-shadow: none !important;
+}
+.chapter-card h2 {
+  color: #120e0a !important;
+  font-weight: 600 !important;
+  text-shadow: none !important;
+}
+.chapter-card h2 em {
+  color: #946313 !important;
+  font-style: italic !important;
+}
+.lineage-name {
+  color: #734d11 !important;
+  font-weight: 700 !important;
+}
+.lineage-parents {
+  color: #1e160e !important;
+  font-weight: 600 !important;
+}
+.lineage-home {
+  color: #574632 !important;
+  font-style: italic !important;
+}
+.compliments-box {
+  margin-top: 12px !important;
+  margin-bottom: 4px !important;
+}
+.compliments-label {
+  color: #734d11 !important;
+  font-weight: 700 !important;
+}
+.compliments-name {
+  color: #120e0a !important;
+  font-weight: 700 !important;
+}
+.final-card .copy-note {
+  color: #1e160e !important;
+  font-weight: 600 !important;
+  text-shadow: none !important;
+}
+.action-pill {
+  background: #ffffff !important;
+  color: #120e0a !important;
+  border: 1.5px solid #946313 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08) !important;
+}
+.action-pill-accent {
+  background: linear-gradient(135deg, #a8761e, #80520c) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 6px 20px rgba(128, 82, 12, 0.45) !important;
+  font-weight: 700 !important;
+}
+
+@media (max-width: 768px) {
+  .chapter-copy[data-start='0'] {
+    padding-top: max(68px, 9svh) !important;
+  }
+  .hero-content {
+    padding: 8px 10px 12px !important;
+  }
+  .chapter-copy h1.shimmer-title {
+    font-size: clamp(1.8rem, 8.2vw, 2.5rem) !important;
+    margin-bottom: 2px !important;
+  }
+  .hero-date {
+    margin-top: 6px !important;
+    gap: 3px !important;
+  }
+  .hero-date-val {
+    white-space: normal !important;
+    font-size: 11px !important;
+    letter-spacing: .16em !important;
+  }
+  .hero-time-text {
+    font-size: 11.5px !important;
+    letter-spacing: .12em !important;
+  }
+  .hero-date-venue {
+    white-space: normal !important;
+    font-size: 10px !important;
+    letter-spacing: .10em !important;
+    max-width: 320px !important;
+  }
+}
