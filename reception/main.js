@@ -1,6 +1,6 @@
 ﻿import { events } from "./wedding.js?v=6.1";
 import { FRAMES_BASE, POSTER } from "./demo-config.js?v=6.1";
-import { FramePlayer } from "./frame-player.js?v=7.3";
+import { FramePlayer } from "./frame-player.js?v=7.4";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -104,22 +104,29 @@ function updateChapter(time) {
     // Smooth cubic easing for alpha
     const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
 
-    if (smoothAlpha > 0.005) {
-      copy.classList.add("is-active");
-      copy.removeAttribute("aria-hidden");
-      copy.inert = false;
+    const isActive = smoothAlpha > 0.005;
+    const wasActive = copy.classList.contains("is-active");
+
+    if (isActive) {
+      if (!wasActive) {
+        copy.classList.add("is-active");
+        copy.removeAttribute("aria-hidden");
+        copy.inert = false;
+        copy.style.visibility = "visible";
+        copy.style.pointerEvents = "auto";
+      }
       copy.style.opacity = smoothAlpha.toFixed(3);
-      copy.style.visibility = "visible";
-      copy.style.pointerEvents = "auto";
-      const translateY = ((1 - smoothAlpha) * 14).toFixed(1);
+      const translateY = ((1 - smoothAlpha) * 12).toFixed(1);
       copy.style.transform = `translate3d(0, ${translateY}px, 0)`;
     } else {
-      copy.classList.remove("is-active");
-      copy.setAttribute("aria-hidden", "true");
-      copy.inert = true;
-      copy.style.opacity = "0";
-      copy.style.visibility = "hidden";
-      copy.style.pointerEvents = "none";
+      if (wasActive) {
+        copy.classList.remove("is-active");
+        copy.setAttribute("aria-hidden", "true");
+        copy.inert = true;
+        copy.style.opacity = "0";
+        copy.style.visibility = "hidden";
+        copy.style.pointerEvents = "none";
+      }
     }
   });
 
@@ -317,8 +324,9 @@ function initAmbientEffects() {
     height = ambCanvas.height = window.innerHeight;
   }, { passive: true });
 
-  const petalCount = 20;
-  const sparkleCount = 30;
+  const isMobile = window.innerWidth <= 768 || (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
+  const petalCount = isMobile ? 8 : 18;
+  const sparkleCount = isMobile ? 12 : 26;
   const petals = [];
   const sparkles = [];
 

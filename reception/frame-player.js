@@ -1,17 +1,17 @@
-// Ultra-Stable Crash-Proof Frame Player with Native HTMLImageElement Decoding & Zero-Leak Buffer Management
+// Ultra-Smooth Butter-Scroller Frame Player with Native Image Decoding & High-Throughput LRU Cache
 const IS_MOBILE = typeof window !== "undefined" && (
   window.innerWidth <= 768 ||
   (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches) ||
   /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")
 );
 
-// Memory & performance bounds:
-// Mobile: 640x360 frames (1920x720 sheet = 5.5MB). Max 5 cached sheets = ~27MB RAM total.
-// Desktop: 1280x720 HD frames (3840x1440 sheet = 22MB). Max 12 cached sheets = ~260MB RAM.
-const PREFETCH_FRAMES = IS_MOBILE ? 12 : 30; // Mobile: 2 sheets ahead; Desktop: 5 sheets ahead
-const INITIAL_WARM_SHEETS = IS_MOBILE ? 2 : 5; // Mobile: 2 sheets; Desktop: 5 sheets
-const MAX_CACHE_SHEETS = IS_MOBILE ? 5 : 12; // Strictly bounded LRU cache
-const MAX_CONCURRENT = IS_MOBILE ? 2 : 4;
+// Performance & Memory Tuned:
+// Mobile: 640x360 frames (1920x720 sheet = 5.5MB). 12 cached sheets = 66MB RAM (well below 280MB iOS ceiling, but generous enough for zero stutter).
+// Desktop: 1280x720 HD frames (3840x1440 sheet = 22MB). 18 cached sheets.
+const PREFETCH_FRAMES = IS_MOBILE ? 36 : 48; // Mobile: 6 sheets ahead (1.5s); Desktop: 8 sheets ahead (2.0s)
+const INITIAL_WARM_SHEETS = IS_MOBILE ? 4 : 6;
+const MAX_CACHE_SHEETS = IS_MOBILE ? 12 : 18;
+const MAX_CONCURRENT = IS_MOBILE ? 3 : 5;
 
 class FrameSheets {
   constructor(manifest, variant, framesBase, onLoad, onError) {
@@ -32,10 +32,11 @@ class FrameSheets {
     this.onLoad = onLoad;
     this.onError = onError;
     this.closed = false;
+    this.backgroundWarming = false;
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.3`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.4`;
   }
 
   bootstrap() {
@@ -72,10 +73,10 @@ class FrameSheets {
         if (this.cache.size <= MAX_CACHE_SHEETS) break;
       }
     }
-    // Hard clamp: if still over limit, drop oldest non-adjacent sheets
+    // Hard clamp if rapid scrubbing exceeds memory budget
     if (this.cache.size > MAX_CACHE_SHEETS) {
       for (const [index, image] of this.cache) {
-        if (!this.wanted.slice(0, 2).includes(index)) {
+        if (!this.wanted.slice(0, 3).includes(index)) {
           try {
             if (image && typeof image.close === "function") image.close();
           } catch {}
@@ -86,13 +87,14 @@ class FrameSheets {
     }
   }
 
+  // Always return the closest available cached frame to ensure the canvas NEVER stalls or freezes
   getClosestCached(targetSheet) {
     if (this.cache.has(targetSheet)) return this.cache.get(targetSheet);
     let best = null;
     let minDiff = Infinity;
     for (const [sheetIdx, image] of this.cache) {
       const diff = Math.abs(sheetIdx - targetSheet);
-      if (diff < minDiff && diff <= 3) {
+      if (diff < minDiff) {
         minDiff = diff;
         best = image;
       }
@@ -126,7 +128,6 @@ class FrameSheets {
     return Array.from({ length: this.bootstrapEnd }, (_, index) => index);
   }
 
-  // Safe native HTMLImageElement decoding: avoids WebKit createImageBitmap memory leaks completely
   async load(index, controller) {
     if (this.closed || controller.signal.aborted) return;
     try {
@@ -140,7 +141,6 @@ class FrameSheets {
       });
       img.src = this.sheetUrl(index);
 
-      // Await native asynchronous decode
       if (typeof img.decode === "function") {
         try {
           await img.decode();
@@ -175,6 +175,29 @@ class FrameSheets {
     } finally {
       this.loading.delete(index);
       this.pump();
+    }
+  }
+
+  // Gentle background prewarm into browser HTTP disk cache
+  startBackgroundWarm() {
+    if (this.backgroundWarming || this.closed) return;
+    this.backgroundWarming = true;
+    const total = this.info.sheets;
+    let next = INITIAL_WARM_SHEETS;
+    const concurrency = IS_MOBILE ? 1 : 2;
+    const runWorker = async () => {
+      while (!this.closed) {
+        const idx = next++;
+        if (idx >= total) break;
+        try {
+          const img = new Image();
+          img.src = this.sheetUrl(idx);
+        } catch {}
+        await new Promise(r => setTimeout(r, IS_MOBILE ? 140 : 80));
+      }
+    };
+    for (let c = 0; c < concurrency; c++) {
+      runWorker();
     }
   }
 
@@ -256,7 +279,7 @@ export class FramePlayer {
   async load() {
     try {
       this.onProgress?.(0.1, "Preparing your journey...");
-      const response = await fetch(`${this.framesBase}/manifest.json?v=7.3`, { cache: "no-store" });
+      const response = await fetch(`${this.framesBase}/manifest.json?v=7.4`, { cache: "no-store" });
       if (!response.ok) throw new Error("Frame manifest unavailable");
       const manifest = await response.json();
       if (this.closed) return;
@@ -287,6 +310,9 @@ export class FramePlayer {
       this.ready = true;
       this.onProgress?.(1, "");
       this.onReady?.({ duration: this.duration, fps: this.fps });
+
+      // Start gentle background warming into HTTP cache
+      this.store.startBackgroundWarm();
     } catch (error) {
       this.fail(error);
     }
@@ -324,7 +350,6 @@ export class FramePlayer {
     );
   }
 
-  // Stable resize: ignores tiny height shifts (<60px) caused by mobile Safari address bar collapse
   resize() {
     const rect = this.canvas.getBoundingClientRect();
     const w = Math.max(1, rect.width);
@@ -334,7 +359,7 @@ export class FramePlayer {
       const dw = Math.abs(this.lastCanvasW - w);
       const dh = Math.abs(this.lastCanvasH - h);
       if (dw < 4 && dh < 60) {
-        return; // Skip destructive buffer reallocation during scrolling!
+        return; // Ignore mobile address bar shifts
       }
     }
 
@@ -391,7 +416,6 @@ export class FramePlayer {
       if (!image) return false;
     }
 
-    // Defensive geometry mapping
     const nw = image.naturalWidth || image.width;
     const nh = image.naturalHeight || image.height;
     if (nw && nh) {
