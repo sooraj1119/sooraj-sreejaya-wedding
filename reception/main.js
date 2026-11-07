@@ -1,6 +1,6 @@
 ﻿import { events } from "./wedding.js?v=6.1";
 import { FRAMES_BASE, POSTER } from "./demo-config.js?v=6.1";
-import { FramePlayer } from "./frame-player.js?v=6.1";
+import { FramePlayer } from "./frame-player.js?v=7.2";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");

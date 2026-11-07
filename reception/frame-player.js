@@ -1,14 +1,24 @@
-// High-Performance Zero-Lag Frame Player with LRU Cache & Background Prewarm
-const PREFETCH_FRAMES = 96; // ~16 sheets ahead
-const INITIAL_WARM_SHEETS = 12; // first 12 sheets (~72 frames) loaded before onReady
-const MAX_CACHE_SHEETS = 50; // Keep up to 50 decoded sheets in memory (~300 frames)
+// High-Performance Crash-Proof Frame Player with Dynamic Mobile Optimization & Strict Memory Management
+const IS_MOBILE = typeof window !== "undefined" && (
+  window.innerWidth <= 768 ||
+  (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches) ||
+  /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")
+);
+
+// Memory & performance constants dynamically tuned for device capability:
+// Mobile: 640x360 frames (1920x720 sheet = 5.5MB per sheet). Max 6 cached sheets = 33MB RAM total (well under iOS WebKit limit).
+// Desktop: 1280x720 HD frames (3840x1440 sheet = 22MB per sheet). Max 14 cached sheets.
+const PREFETCH_FRAMES = IS_MOBILE ? 18 : 36;
+const INITIAL_WARM_SHEETS = IS_MOBILE ? 3 : 6;
+const MAX_CACHE_SHEETS = IS_MOBILE ? 6 : 14;
+const MAX_CONCURRENT = IS_MOBILE ? 2 : 5;
 
 class FrameSheets {
   constructor(manifest, variant, framesBase, onLoad, onError) {
     this.framesBase = framesBase;
     this.manifest = manifest;
     this.variant = variant;
-    this.info = manifest.variants[variant];
+    this.info = manifest.variants[variant] || manifest.variants["desktop"];
     this.perSheet = manifest.columns * manifest.rows;
     this.prefetchSheets = Math.min(
       this.info.sheets,
@@ -26,7 +36,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=6.0`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.2`;
   }
 
   bootstrap() {
@@ -56,9 +66,23 @@ class FrameSheets {
     if (this.cache.size <= MAX_CACHE_SHEETS) return;
     for (const [index, bitmap] of this.cache) {
       if (!this.wanted.includes(index) && index >= this.bootstrapEnd) {
-        try { if (bitmap && typeof bitmap.close === "function") bitmap.close(); } catch {}
+        try {
+          if (bitmap && typeof bitmap.close === "function") bitmap.close();
+        } catch {}
         this.cache.delete(index);
         if (this.cache.size <= MAX_CACHE_SHEETS) break;
+      }
+    }
+    // Strict fallback: if still exceeding max sheets (e.g. during rapid scrubbing), evict furthest
+    if (this.cache.size > MAX_CACHE_SHEETS) {
+      for (const [index, bitmap] of this.cache) {
+        if (!this.wanted.slice(0, 2).includes(index)) {
+          try {
+            if (bitmap && typeof bitmap.close === "function") bitmap.close();
+          } catch {}
+          this.cache.delete(index);
+          if (this.cache.size <= MAX_CACHE_SHEETS) break;
+        }
       }
     }
   }
@@ -78,7 +102,7 @@ class FrameSheets {
   }
 
   maxConcurrent() {
-    return 8;
+    return MAX_CONCURRENT;
   }
 
   pump() {
@@ -143,13 +167,13 @@ class FrameSheets {
     }
   }
 
-  // Progressive background prewarm of all sheets into browser HTTP cache
+  // Progressive background prewarm of sheets into browser HTTP cache (desktop only)
   startBackgroundWarm() {
-    if (this.backgroundWarming || this.closed) return;
+    if (IS_MOBILE || this.backgroundWarming || this.closed) return;
     this.backgroundWarming = true;
     const total = this.info.sheets;
     let next = INITIAL_WARM_SHEETS;
-    const concurrency = 4;
+    const concurrency = 2;
     const runWorker = async () => {
       while (!this.closed) {
         const idx = next++;
@@ -159,7 +183,7 @@ class FrameSheets {
           if (resp.ok) await resp.blob();
         } catch {}
         // Yield to main thread
-        await new Promise(r => setTimeout(r, 40));
+        await new Promise(r => setTimeout(r, 80));
       }
     };
     for (let c = 0; c < concurrency; c++) {
@@ -235,22 +259,24 @@ export class FramePlayer {
       }
     };
     await Promise.all(
-      Array.from({ length: Math.min(6, total) }, () => run())
+      Array.from({ length: Math.min(MAX_CONCURRENT, total) }, () => run())
     );
   }
 
   async load() {
     try {
       this.onProgress?.(0.1, "Preparing your journey...");
-      const response = await fetch(`${this.framesBase}/manifest.json?v=6.0`, { cache: "no-store" });
+      const response = await fetch(`${this.framesBase}/manifest.json?v=7.2`, { cache: "no-store" });
       if (!response.ok) throw new Error("Frame manifest unavailable");
       const manifest = await response.json();
       if (this.closed) return;
       this.fps = manifest.fps;
       this.perSheet = manifest.columns * manifest.rows;
       this.columns = manifest.columns;
-      this.variant = "desktop"; // 1280x720 HD frames across all devices
-      this.info = manifest.variants[this.variant];
+      
+      // Auto-select lightweight mobile variant on mobile devices to prevent OOM crash
+      this.variant = IS_MOBILE ? "mobile" : "desktop";
+      this.info = manifest.variants[this.variant] || manifest.variants["desktop"];
       this.duration = this.info.count / this.fps;
       this.end = (this.info.count - 1) / this.fps;
       this.store = new FrameSheets(
@@ -273,7 +299,7 @@ export class FramePlayer {
       this.onProgress?.(1, "");
       this.onReady?.({ duration: this.duration, fps: this.fps });
       
-      // Immediately kick off background caching of remaining sheets
+      // Kick off gentle background caching on desktop only
       this.store.startBackgroundWarm();
     } catch (error) {
       this.fail(error);
@@ -317,8 +343,8 @@ export class FramePlayer {
     this.width = Math.max(1, rect.width);
     this.height = Math.max(1, rect.height);
     const nativeDpr = window.devicePixelRatio || 1;
-    // Support up to 3x Retina DPR for crisp display
-    const dpr = Math.min(Math.max(nativeDpr, 1.5), 3);
+    // On mobile, clamp DPR to 2 to prevent excessive framebuffer memory
+    const dpr = IS_MOBILE ? Math.min(nativeDpr, 2) : Math.min(Math.max(nativeDpr, 1.5), 2.5);
     this.canvas.width = Math.round(this.width * dpr);
     this.canvas.height = Math.round(this.height * dpr);
     this.context.setTransform(1, 0, 0, 1, 0, 0);
@@ -361,7 +387,12 @@ export class FramePlayer {
 
     // Defensive grid geometry calculation
     if (bitmap.width && bitmap.height) {
-      if (bitmap.width === 3840 && bitmap.height === 1440) {
+      if (bitmap.width === 1920 && bitmap.height === 720) {
+        this.info.width = 640;
+        this.info.height = 360;
+        this.columns = 3;
+        this.perSheet = 6;
+      } else if (bitmap.width === 3840 && bitmap.height === 1440) {
         this.info.width = 1280;
         this.info.height = 720;
         this.columns = 3;

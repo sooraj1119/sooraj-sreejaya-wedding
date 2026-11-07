@@ -4,8 +4,8 @@
   "rows": 2,
   "variants": {
     "mobile": {
-      "width": 1280,
-      "height": 720,
+      "width": 640,
+      "height": 360,
       "count": 480,
       "sheets": 80
     },
