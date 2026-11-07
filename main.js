@@ -358,7 +358,7 @@ events.forEach((event, i) => {
     `DTSTART:${utcStamp(event.start)}`,
     `DTEND:${utcStamp(event.end)}`,
     `SUMMARY:${escapeICS(`Sooraj & Sreejaya - ${event.label}`)}`,
-    `LOCATION:${escapeICS(`${event.venue}, Kadavanthra, Kochi`)}`,
+    `LOCATION:${escapeICS(`${event.venue}`)}`,
     "DESCRIPTION:Auspicious wedding ceremony of Sooraj & Sreejaya.",
     "END:VEVENT",
   );

@@ -1,21 +1,21 @@
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Sooraj & Sreejaya Wedding//EN
-CALSCALE:GREGORIAN
-METHOD:PUBLISH
-BEGIN:VEVENT
-UID:sooraj-sreejaya-wedding-20261219@wedding.com
-DTSTAMP:20261031T120000Z
-DTSTART;TZID=Asia/Kolkata:20261219T110000
-DTEND;TZID=Asia/Kolkata:20261219T150000
-SUMMARY:Sooraj & Sreejaya Wedding (Auspicious Muhurtham)
-DESCRIPTION:With the love and blessings of the Ajith Kumar and Lakshmanan families\, join us for the Auspicious Muhurtham (11:00 AM - 12:00 PM) followed by traditional Kerala Sadya.\n\nWith Best Compliments from Manjunath & Saritha.
-LOCATION:Kalyana Mandapam, Kadavanthra, Kochi, Kerala
-STATUS:CONFIRMED
-BEGIN:VALARM
-TRIGGER:-P1D
-ACTION:DISPLAY
-DESCRIPTION:Reminder: Sooraj & Sreejaya Wedding Tomorrow!
-END:VALARM
-END:VEVENT
-END:VCALENDAR
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sooraj & Sreejaya Wedding//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:sooraj-sreejaya-wedding-20261219@wedding.com
+DTSTAMP:20261107T120000Z
+DTSTART;TZID=Asia/Kolkata:20261219T115000
+DTEND;TZID=Asia/Kolkata:20261219T153000
+SUMMARY:Sooraj & Sreejaya Wedding (Auspicious Muhurtham)
+DESCRIPTION:By God's Grace and with full hearts & our families' blessings\, join us for the Auspicious Muhurtham (11:50 AM - 12:30 PM) at Dinesh Auditorium\, Thana\, Kannur\, followed by Traditional Kerala Sadhya Feast.\n\nWith Best Compliments from Manjunath & Saritha.
+LOCATION:Dinesh Auditorium, Thana, Kannur, Kerala, India
+STATUS:CONFIRMED
+BEGIN:VALARM
+TRIGGER:-P1D
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Sooraj & Sreejaya Wedding Tomorrow!
+END:VALARM
+END:VEVENT
+END:VCALENDAR
