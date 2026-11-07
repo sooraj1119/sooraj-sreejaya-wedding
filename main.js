@@ -297,10 +297,10 @@ const dateFormat = new Intl.DateTimeFormat("en-GB", {
   month: "long",
   timeZone: "Asia/Kolkata",
 });
-const timeFormat = new Intl.DateTimeFormat("en-GB", {
+const timeFormat = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
   minute: "2-digit",
-  hour12: true,
+  hourCycle: "h12",
   timeZone: "Asia/Kolkata",
 });
 const list = $("#events-list");
