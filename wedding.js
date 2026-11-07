@@ -3,8 +3,8 @@ export const events = [
   {
     title: 'Thalikettu Ceremony',
     label: 'Sacred Temple Rituals',
-    start: '2026-12-19T08:30:00+05:30',
-    end: '2026-12-19T10:00:00+05:30',
+    start: '2026-12-19T08:00:00+05:30',
+    end: '2026-12-19T09:30:00+05:30',
     venue: 'Sree Chovva Maha Siva Temple, Kannur',
     note: 'Morning auspicious Thalikettu ceremony seeking divine blessings.',
   },
