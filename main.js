@@ -409,7 +409,7 @@ detailsDialog?.addEventListener("close", () => {
 });
 // Google Apps Script Web App URL for Google Sheets RSVP recording
 // Paste your deployed Google Apps Script Web App URL here:
-const GOOGLE_SHEET_RSVP_URL = "";
+const GOOGLE_SHEET_RSVP_URL = "https://script.google.com/macros/s/AKfycbztpBXUAiP9L4NikPp74_-pSsJrxCpnEWjdpIAOA1-aQJKQbm62ZugwBXphbMZcyk_2/exec";
 
 const form = $("#rsvp-form");
 const storageKey = "sooraj-sreejaya-rsvp-preview-v1";
