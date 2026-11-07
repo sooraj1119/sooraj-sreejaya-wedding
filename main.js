@@ -480,15 +480,19 @@ if (form) {
 // -------------------------------------------------------------
 // BULLETPROOF AUDIO CONTROLLER WITH AUTO-PAUSE ON MINIMIZE
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// 100% GUARANTEED SILENCE ON MINIMIZE (PAUSE + HARD MUTE)
+// -------------------------------------------------------------
 const bgm = document.querySelector("#bgm-audio");
 const audioPrompt = document.querySelector("#audio-prompt");
 let musicPlaying = false;
 let userPaused = false;
 let wasPlayingBeforeHidden = false;
 let audioStarting = false;
+let isAppBackgrounded = false;
 
 function showAudioPrompt() {
-  if (audioPrompt && !musicPlaying && !userPaused) {
+  if (audioPrompt && !musicPlaying && !userPaused && !isAppBackgrounded) {
     audioPrompt.classList.add("is-visible");
   }
 }
@@ -500,19 +504,23 @@ function hideAudioPrompt() {
 }
 
 function startAudio() {
-  if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) return;
+  if (isAppBackgrounded || (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden"))) {
+    return;
+  }
   if (userPaused) return;
-  if (musicPlaying && bgm && !bgm.paused) return;
+  if (musicPlaying && bgm && !bgm.paused && !bgm.muted) return;
   if (!bgm || audioStarting) return;
 
   audioStarting = true;
+  bgm.muted = false;
   bgm.volume = 0.75;
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
-        if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) {
+        if (isAppBackgrounded || (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden"))) {
           bgm.pause();
+          bgm.muted = true;
           musicPlaying = false;
           audioStarting = false;
           return;
@@ -530,18 +538,22 @@ function startAudio() {
 }
 
 function handlePageHidden() {
+  isAppBackgrounded = true;
   if (!bgm) return;
   if (!bgm.paused || musicPlaying) {
     wasPlayingBeforeHidden = true;
   }
   bgm.pause();
+  bgm.muted = true;
   musicPlaying = false;
   audioStarting = false;
 }
 
 function handlePageVisible() {
+  isAppBackgrounded = false;
   if (!bgm) return;
   if (wasPlayingBeforeHidden && !userPaused && !document.hidden && document.visibilityState === "visible") {
+    bgm.muted = false;
     startAudio();
   }
   wasPlayingBeforeHidden = false;
@@ -566,7 +578,7 @@ window.addEventListener("focus", () => {
 });
 
 function onFirstInteraction() {
-  if (!userPaused && (!document.hidden)) {
+  if (!userPaused && !isAppBackgrounded && !document.hidden) {
     startAudio();
   }
 }
@@ -591,7 +603,7 @@ if (audioPrompt) {
 
 if (bgm) {
   bgm.addEventListener("ended", () => {
-    if (!document.hidden && !userPaused) {
+    if (!document.hidden && !userPaused && !isAppBackgrounded) {
       bgm.currentTime = 0;
       bgm.play().catch(() => {});
     }

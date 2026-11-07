@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=7.7";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.7";
-import { FramePlayer } from "./frame-player.js?v=7.7";
+﻿import { events } from "./wedding.js?v=7.8";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.8";
+import { FramePlayer } from "./frame-player.js?v=7.8";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -754,6 +754,9 @@ if (form) {
 // -------------------------------------------------------------
 // BULLETPROOF AUDIO CONTROLLER WITH AUTO-PAUSE ON MINIMIZE
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// 100% GUARANTEED SILENCE ON MINIMIZE (PAUSE + HARD MUTE)
+// -------------------------------------------------------------
 const bgm = document.querySelector("#bgm-audio");
 const audioPrompt = document.querySelector("#audio-prompt");
 const musicToggle = document.querySelector("#music-toggle");
@@ -761,9 +764,10 @@ let musicPlaying = false;
 let userPaused = false;
 let wasPlayingBeforeHidden = false;
 let audioStarting = false;
+let isAppBackgrounded = false;
 
 function showAudioPrompt() {
-  if (audioPrompt && !musicPlaying && !userPaused) {
+  if (audioPrompt && !musicPlaying && !userPaused && !isAppBackgrounded) {
     audioPrompt.classList.add("is-visible");
   }
 }
@@ -776,29 +780,32 @@ function hideAudioPrompt() {
 
 function updateMusicUI() {
   if (musicToggle) {
-    musicToggle.classList.toggle("is-playing", musicPlaying);
+    musicToggle.classList.toggle("is-playing", musicPlaying && !isAppBackgrounded);
     const textEl = musicToggle.querySelector(".music-text");
-    if (textEl) textEl.textContent = musicPlaying ? "Playing" : "Play";
+    if (textEl) textEl.textContent = (musicPlaying && !isAppBackgrounded) ? "Playing" : "Play";
   }
 }
 
 function startAudio() {
-  // CRITICAL: If phone is minimized or screen is locked or tab is hidden, NEVER start audio!
-  if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) return;
-  // If user intentionally paused music, do not auto-play on scroll or touch
+  // If app is minimized, screen is locked, or tab is hidden: STRICTLY ABORT
+  if (isAppBackgrounded || (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden"))) {
+    return;
+  }
   if (userPaused) return;
-  if (musicPlaying && bgm && !bgm.paused) return;
+  if (musicPlaying && bgm && !bgm.paused && !bgm.muted) return;
   if (!bgm || audioStarting) return;
 
   audioStarting = true;
+  bgm.muted = false;
   bgm.volume = 0.75;
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
-        // Re-check visibility in case phone was minimized while promise resolved
-        if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) {
+        // Double check in case device was minimized while promise resolved
+        if (isAppBackgrounded || (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden"))) {
           bgm.pause();
+          bgm.muted = true;
           musicPlaying = false;
           audioStarting = false;
           updateMusicUI();
@@ -825,6 +832,7 @@ function pauseAudio(isManual = false) {
     wasPlayingBeforeHidden = false;
   }
   bgm.pause();
+  bgm.muted = true;
   musicPlaying = false;
   audioStarting = false;
   updateMusicUI();
@@ -832,7 +840,7 @@ function pauseAudio(isManual = false) {
 
 function toggleAudio() {
   if (!bgm) return;
-  if (bgm.paused) {
+  if (bgm.paused || userPaused) {
     userPaused = false;
     startAudio();
   } else {
@@ -841,27 +849,31 @@ function toggleAudio() {
 }
 
 function handlePageHidden() {
+  isAppBackgrounded = true;
   if (!bgm) return;
   if (!bgm.paused || musicPlaying) {
     wasPlayingBeforeHidden = true;
   }
-  // Immediately halt playback and reset audioStarting lock
+  // DUAL ACTION: Both pause AND hardware mute to guarantee silence on all mobile engines
   bgm.pause();
+  bgm.muted = true;
   musicPlaying = false;
   audioStarting = false;
   updateMusicUI();
 }
 
 function handlePageVisible() {
+  isAppBackgrounded = false;
   if (!bgm) return;
-  // Only resume if it was playing before minimizing AND the user didn't manually pause
+  // Only resume if user hadn't explicitly paused and it was playing before
   if (wasPlayingBeforeHidden && !userPaused && !document.hidden && document.visibilityState === "visible") {
+    bgm.muted = false;
     startAudio();
   }
   wasPlayingBeforeHidden = false;
 }
 
-// 1. W3C Page Visibility API (Phone minimize, app switch, screen lock, tab switch)
+// 1. W3C Page Visibility (Minimizing browser, locking phone, switching tabs/apps)
 document.addEventListener("visibilitychange", () => {
   if (document.hidden || document.visibilityState === "hidden") {
     handlePageHidden();
@@ -870,19 +882,18 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// 2. iOS Safari pagehide / pageshow
+// 2. iOS Safari pagehide (Home swipe, App Switcher, bfcache)
 window.addEventListener("pagehide", handlePageHidden);
 window.addEventListener("pageshow", (e) => {
   if (!document.hidden && document.visibilityState === "visible") handlePageVisible();
 });
 
-// 3. Window blur / focus (Control Center, Notification shade, app switcher swipe)
+// 3. Window blur / focus (Control Center, Notification tray)
 window.addEventListener("blur", handlePageHidden);
 window.addEventListener("focus", () => {
   if (!document.hidden && document.visibilityState === "visible") handlePageVisible();
 });
 
-// Toggle button click
 if (musicToggle) {
   musicToggle.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -890,9 +901,8 @@ if (musicToggle) {
   });
 }
 
-// Global one-time interaction triggers to unlock browser autoplay policy
 function onFirstInteraction() {
-  if (!userPaused && (!document.hidden)) {
+  if (!userPaused && !isAppBackgrounded && !document.hidden) {
     startAudio();
   }
 }
@@ -917,7 +927,7 @@ if (audioPrompt) {
 
 if (bgm) {
   bgm.addEventListener("ended", () => {
-    if (!document.hidden && !userPaused) {
+    if (!document.hidden && !userPaused && !isAppBackgrounded) {
       bgm.currentTime = 0;
       bgm.play().catch(() => {});
     }
