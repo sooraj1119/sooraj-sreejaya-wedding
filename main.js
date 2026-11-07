@@ -415,7 +415,7 @@ const form = $("#rsvp-form");
 const storageKey = "sooraj-sreejaya-rsvp-preview-v1";
 function syncGuestField() {
   if (!form) return;
-  const attending = form.elements.attendance.value === "yes";
+  const attending = form.elements.attendance.value === "yes" || form.elements.attendance.value === "Joyfully accept";
   $("#guest-field").hidden = !attending;
   form.elements.guests.disabled = !attending;
 }
