@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=7.6";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.6";
-import { FramePlayer } from "./frame-player.js?v=7.6";
+﻿import { events } from "./wedding.js?v=7.7";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.7";
+import { FramePlayer } from "./frame-player.js?v=7.7";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -751,13 +751,19 @@ if (form) {
 // -------------------------------------------------------------
 // BACKGROUND MUSIC CONTROLLER
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// BULLETPROOF AUDIO CONTROLLER WITH AUTO-PAUSE ON MINIMIZE
+// -------------------------------------------------------------
 const bgm = document.querySelector("#bgm-audio");
 const audioPrompt = document.querySelector("#audio-prompt");
 const musicToggle = document.querySelector("#music-toggle");
 let musicPlaying = false;
+let userPaused = false;
+let wasPlayingBeforeHidden = false;
+let audioStarting = false;
 
 function showAudioPrompt() {
-  if (audioPrompt && !musicPlaying) {
+  if (audioPrompt && !musicPlaying && !userPaused) {
     audioPrompt.classList.add("is-visible");
   }
 }
@@ -776,20 +782,33 @@ function updateMusicUI() {
   }
 }
 
-let audioStarting = false;
 function startAudio() {
+  // CRITICAL: If phone is minimized or screen is locked or tab is hidden, NEVER start audio!
+  if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) return;
+  // If user intentionally paused music, do not auto-play on scroll or touch
+  if (userPaused) return;
   if (musicPlaying && bgm && !bgm.paused) return;
   if (!bgm || audioStarting) return;
+
   audioStarting = true;
   bgm.volume = 0.75;
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
+        // Re-check visibility in case phone was minimized while promise resolved
+        if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) {
+          bgm.pause();
+          musicPlaying = false;
+          audioStarting = false;
+          updateMusicUI();
+          return;
+        }
         musicPlaying = true;
         audioStarting = false;
         hideAudioPrompt();
         updateMusicUI();
+        removeGlobalAudioTriggers();
       })
       .catch(() => {
         audioStarting = false;
@@ -799,17 +818,71 @@ function startAudio() {
   }
 }
 
+function pauseAudio(isManual = false) {
+  if (!bgm) return;
+  if (isManual) {
+    userPaused = true;
+    wasPlayingBeforeHidden = false;
+  }
+  bgm.pause();
+  musicPlaying = false;
+  audioStarting = false;
+  updateMusicUI();
+}
+
 function toggleAudio() {
   if (!bgm) return;
   if (bgm.paused) {
+    userPaused = false;
     startAudio();
   } else {
-    bgm.pause();
-    musicPlaying = false;
-    updateMusicUI();
+    pauseAudio(true);
   }
 }
 
+function handlePageHidden() {
+  if (!bgm) return;
+  if (!bgm.paused || musicPlaying) {
+    wasPlayingBeforeHidden = true;
+  }
+  // Immediately halt playback and reset audioStarting lock
+  bgm.pause();
+  musicPlaying = false;
+  audioStarting = false;
+  updateMusicUI();
+}
+
+function handlePageVisible() {
+  if (!bgm) return;
+  // Only resume if it was playing before minimizing AND the user didn't manually pause
+  if (wasPlayingBeforeHidden && !userPaused && !document.hidden && document.visibilityState === "visible") {
+    startAudio();
+  }
+  wasPlayingBeforeHidden = false;
+}
+
+// 1. W3C Page Visibility API (Phone minimize, app switch, screen lock, tab switch)
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || document.visibilityState === "hidden") {
+    handlePageHidden();
+  } else {
+    handlePageVisible();
+  }
+});
+
+// 2. iOS Safari pagehide / pageshow
+window.addEventListener("pagehide", handlePageHidden);
+window.addEventListener("pageshow", (e) => {
+  if (!document.hidden && document.visibilityState === "visible") handlePageVisible();
+});
+
+// 3. Window blur / focus (Control Center, Notification shade, app switcher swipe)
+window.addEventListener("blur", handlePageHidden);
+window.addEventListener("focus", () => {
+  if (!document.hidden && document.visibilityState === "visible") handlePageVisible();
+});
+
+// Toggle button click
 if (musicToggle) {
   musicToggle.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -817,60 +890,39 @@ if (musicToggle) {
   });
 }
 
-window.addEventListener("pointerdown", startAudio, { passive: true });
-window.addEventListener("click", startAudio, { passive: true });
-window.addEventListener("touchstart", startAudio, { passive: true });
-window.addEventListener("touchend", startAudio, { passive: true });
+// Global one-time interaction triggers to unlock browser autoplay policy
+function onFirstInteraction() {
+  if (!userPaused && (!document.hidden)) {
+    startAudio();
+  }
+}
+
+window.addEventListener("pointerdown", onFirstInteraction, { passive: true });
+window.addEventListener("click", onFirstInteraction, { passive: true });
+window.addEventListener("touchstart", onFirstInteraction, { passive: true });
+
+function removeGlobalAudioTriggers() {
+  window.removeEventListener("pointerdown", onFirstInteraction);
+  window.removeEventListener("click", onFirstInteraction);
+  window.removeEventListener("touchstart", onFirstInteraction);
+}
 
 if (audioPrompt) {
   audioPrompt.addEventListener("click", (e) => {
     e.stopPropagation();
+    userPaused = false;
     startAudio();
   });
 }
 
 if (bgm) {
   bgm.addEventListener("ended", () => {
-    bgm.currentTime = 0;
-    bgm.play().catch(() => {});
+    if (!document.hidden && !userPaused) {
+      bgm.currentTime = 0;
+      bgm.play().catch(() => {});
+    }
   });
 }
-
-// -------------------------------------------------------------
-// AUTO-PAUSE ON MINIMIZE / BACKGROUND / APP SWITCH
-// -------------------------------------------------------------
-let wasPlayingBeforeHidden = false;
-
-document.addEventListener("visibilitychange", () => {
-  if (!bgm) return;
-  if (document.hidden) {
-    wasPlayingBeforeHidden = musicPlaying && !bgm.paused;
-    if (wasPlayingBeforeHidden) {
-      bgm.pause();
-      musicPlaying = false;
-      updateMusicUI();
-    }
-  } else {
-    if (wasPlayingBeforeHidden) {
-      startAudio();
-    }
-  }
-});
-
-window.addEventListener("pagehide", () => {
-  if (bgm && !bgm.paused) {
-    wasPlayingBeforeHidden = true;
-    bgm.pause();
-    musicPlaying = false;
-    updateMusicUI();
-  }
-});
-
-window.addEventListener("pageshow", () => {
-  if (wasPlayingBeforeHidden && !document.hidden) {
-    startAudio();
-  }
-});
 
 window.updateChapter = updateChapter;
 window.player = player;

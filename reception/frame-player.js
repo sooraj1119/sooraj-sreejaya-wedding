@@ -36,7 +36,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.6`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.7`;
   }
 
   bootstrap() {

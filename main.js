@@ -477,12 +477,18 @@ if (form) {
 // -------------------------------------------------------------
 // BACKGROUND MUSIC CONTROLLER
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// BULLETPROOF AUDIO CONTROLLER WITH AUTO-PAUSE ON MINIMIZE
+// -------------------------------------------------------------
 const bgm = document.querySelector("#bgm-audio");
 const audioPrompt = document.querySelector("#audio-prompt");
 let musicPlaying = false;
+let userPaused = false;
+let wasPlayingBeforeHidden = false;
+let audioStarting = false;
 
 function showAudioPrompt() {
-  if (audioPrompt && !musicPlaying) {
+  if (audioPrompt && !musicPlaying && !userPaused) {
     audioPrompt.classList.add("is-visible");
   }
 }
@@ -494,73 +500,100 @@ function hideAudioPrompt() {
 }
 
 function startAudio() {
+  if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) return;
+  if (userPaused) return;
   if (musicPlaying && bgm && !bgm.paused) return;
-  if (!bgm) return;
+  if (!bgm || audioStarting) return;
+
+  audioStarting = true;
   bgm.volume = 0.75;
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
+        if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) {
+          bgm.pause();
+          musicPlaying = false;
+          audioStarting = false;
+          return;
+        }
         musicPlaying = true;
+        audioStarting = false;
         hideAudioPrompt();
+        removeGlobalAudioTriggers();
       })
       .catch(() => {
+        audioStarting = false;
         showAudioPrompt();
       });
   }
 }
 
-window.addEventListener("pointerdown", startAudio, { passive: true });
-window.addEventListener("click", startAudio, { passive: true });
-window.addEventListener("touchstart", startAudio, { passive: true });
-window.addEventListener("touchend", startAudio, { passive: true });
+function handlePageHidden() {
+  if (!bgm) return;
+  if (!bgm.paused || musicPlaying) {
+    wasPlayingBeforeHidden = true;
+  }
+  bgm.pause();
+  musicPlaying = false;
+  audioStarting = false;
+}
+
+function handlePageVisible() {
+  if (!bgm) return;
+  if (wasPlayingBeforeHidden && !userPaused && !document.hidden && document.visibilityState === "visible") {
+    startAudio();
+  }
+  wasPlayingBeforeHidden = false;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || document.visibilityState === "hidden") {
+    handlePageHidden();
+  } else {
+    handlePageVisible();
+  }
+});
+
+window.addEventListener("pagehide", handlePageHidden);
+window.addEventListener("pageshow", () => {
+  if (!document.hidden && document.visibilityState === "visible") handlePageVisible();
+});
+
+window.addEventListener("blur", handlePageHidden);
+window.addEventListener("focus", () => {
+  if (!document.hidden && document.visibilityState === "visible") handlePageVisible();
+});
+
+function onFirstInteraction() {
+  if (!userPaused && (!document.hidden)) {
+    startAudio();
+  }
+}
+
+window.addEventListener("pointerdown", onFirstInteraction, { passive: true });
+window.addEventListener("click", onFirstInteraction, { passive: true });
+window.addEventListener("touchstart", onFirstInteraction, { passive: true });
+
+function removeGlobalAudioTriggers() {
+  window.removeEventListener("pointerdown", onFirstInteraction);
+  window.removeEventListener("click", onFirstInteraction);
+  window.removeEventListener("touchstart", onFirstInteraction);
+}
 
 if (audioPrompt) {
   audioPrompt.addEventListener("click", (e) => {
     e.stopPropagation();
+    userPaused = false;
     startAudio();
   });
 }
 
 if (bgm) {
   bgm.addEventListener("ended", () => {
-    bgm.currentTime = 0;
-    bgm.play().catch(() => {});
+    if (!document.hidden && !userPaused) {
+      bgm.currentTime = 0;
+      bgm.play().catch(() => {});
+    }
   });
 }
-
-// -------------------------------------------------------------
-// AUTO-PAUSE ON MINIMIZE / BACKGROUND / APP SWITCH
-// -------------------------------------------------------------
-let wasPlayingBeforeHidden = false;
-
-document.addEventListener("visibilitychange", () => {
-  if (!bgm) return;
-  if (document.hidden) {
-    wasPlayingBeforeHidden = musicPlaying && !bgm.paused;
-    if (wasPlayingBeforeHidden) {
-      bgm.pause();
-      musicPlaying = false;
-      
-    }
-  } else {
-    if (wasPlayingBeforeHidden) {
-      startAudio();
-    }
-  }
-});
-
-window.addEventListener("pagehide", () => {
-  if (bgm && !bgm.paused) {
-    wasPlayingBeforeHidden = true;
-    bgm.pause();
-    musicPlaying = false;
-    
-  }
-});
-
-window.addEventListener("pageshow", () => {
-  if (wasPlayingBeforeHidden && !document.hidden) {
-    startAudio();
-  }
-});
