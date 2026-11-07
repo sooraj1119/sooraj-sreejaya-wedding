@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=7.5";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.5";
-import { FramePlayer } from "./frame-player.js?v=7.5";
+﻿import { events } from "./wedding.js?v=7.6";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.6";
+import { FramePlayer } from "./frame-player.js?v=7.6";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -835,5 +835,42 @@ if (bgm) {
     bgm.play().catch(() => {});
   });
 }
+
+// -------------------------------------------------------------
+// AUTO-PAUSE ON MINIMIZE / BACKGROUND / APP SWITCH
+// -------------------------------------------------------------
+let wasPlayingBeforeHidden = false;
+
+document.addEventListener("visibilitychange", () => {
+  if (!bgm) return;
+  if (document.hidden) {
+    wasPlayingBeforeHidden = musicPlaying && !bgm.paused;
+    if (wasPlayingBeforeHidden) {
+      bgm.pause();
+      musicPlaying = false;
+      updateMusicUI();
+    }
+  } else {
+    if (wasPlayingBeforeHidden) {
+      startAudio();
+    }
+  }
+});
+
+window.addEventListener("pagehide", () => {
+  if (bgm && !bgm.paused) {
+    wasPlayingBeforeHidden = true;
+    bgm.pause();
+    musicPlaying = false;
+    updateMusicUI();
+  }
+});
+
+window.addEventListener("pageshow", () => {
+  if (wasPlayingBeforeHidden && !document.hidden) {
+    startAudio();
+  }
+});
+
 window.updateChapter = updateChapter;
 window.player = player;

@@ -528,3 +528,39 @@ if (bgm) {
     bgm.play().catch(() => {});
   });
 }
+
+// -------------------------------------------------------------
+// AUTO-PAUSE ON MINIMIZE / BACKGROUND / APP SWITCH
+// -------------------------------------------------------------
+let wasPlayingBeforeHidden = false;
+
+document.addEventListener("visibilitychange", () => {
+  if (!bgm) return;
+  if (document.hidden) {
+    wasPlayingBeforeHidden = musicPlaying && !bgm.paused;
+    if (wasPlayingBeforeHidden) {
+      bgm.pause();
+      musicPlaying = false;
+      
+    }
+  } else {
+    if (wasPlayingBeforeHidden) {
+      startAudio();
+    }
+  }
+});
+
+window.addEventListener("pagehide", () => {
+  if (bgm && !bgm.paused) {
+    wasPlayingBeforeHidden = true;
+    bgm.pause();
+    musicPlaying = false;
+    
+  }
+});
+
+window.addEventListener("pageshow", () => {
+  if (wasPlayingBeforeHidden && !document.hidden) {
+    startAudio();
+  }
+});
