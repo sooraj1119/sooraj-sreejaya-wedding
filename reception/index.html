@@ -14,8 +14,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   
   <link rel="preload" as="image" href="poster.jpg?v=4.0" />
-  <link rel="stylesheet" href="styles.css?v=7.9" />
-  <script type="module" src="main.js?v=7.9"></script>
+  <link rel="stylesheet" href="styles.css?v=8.0" />
+  <script type="module" src="main.js?v=8.0"></script>
 </head>
 <body>
   <!-- Film Loader -->
@@ -189,9 +189,10 @@
     <button type="button" class="dialog-close" id="close-rsvp" aria-label="Close RSVP">&times;</button>
     <p class="small-label">Sooraj &amp; Sreejaya &bull; Reception RSVP</p>
     <h2 id="rsvp-title">A place <em>for you.</em></h2>
-    <p class="demo-note">Kindly confirm your presence by 15 December 2026. Your RSVP will be automatically emailed to <strong>sooraj1119@gmail.com</strong>.</p>
+    <p class="demo-note">Kindly confirm your presence by 15 December 2026 to help us welcome you warmly.</p>
     <form id="rsvp-form">
       <label>Your name<input name="name" autocomplete="name" required maxlength="100" placeholder="Your full name" /></label>
+      <label>Your phone or email (optional)<input name="contact" autocomplete="email" maxlength="100" placeholder="Phone number or email address" /></label>
       <label>Will you join us?
         <select name="attendance">
           <option value="yes">Joyfully accept</option>
@@ -210,7 +211,7 @@
       <label>A little note / blessings
         <textarea name="message" rows="3" maxlength="500" placeholder="A blessing, toast, or warm wish for Sooraj &amp; Sreejaya"></textarea>
       </label>
-      <button class="rsvp-button" type="submit">Confirm My Attendance <span aria-hidden="true">&rarr;</span></button>
+      <button class="rsvp-button" id="rsvp-submit-btn" type="submit">Confirm My Attendance <span aria-hidden="true">&rarr;</span></button>
       <p id="rsvp-status" role="status" style="margin-top: 12px; font-size: 11px; color: #856b45;"></p>
     </form>
   </dialog>

@@ -603,6 +603,9 @@ detailsDialog?.addEventListener("click", (event) => {
     detailsDialog.close();
 });
 
+// Google Apps Script Web App URL for Google Sheets RSVP recording
+const GOOGLE_SHEET_RSVP_URL = "https://script.google.com/macros/s/AKfycbztpBXUAiP9L4NikPp74_-pSsJrxCpnEWjdpIAOA1-aQJKQbm62ZugwBXphbMZcyk_2/exec";
+
 const form = $("#rsvp-form");
 const storageKey = "sooraj-sreejaya-reception-rsvp-v1";
 
@@ -652,99 +655,121 @@ dialog?.addEventListener("click", (event) => {
 if (form) {
   form.elements.attendance.addEventListener("change", syncGuestField);
   form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const statusEl = $("#rsvp-status");
-    const values = Object.fromEntries(new FormData(form));
-    values.name = values.name.trim();
-    if (!values.name) {
-      form.elements.name.setCustomValidity("Please enter your name.");
-      form.elements.name.reportValidity();
-      return;
-    }
-
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Sending RSVP...";
-    }
-    if (statusEl) {
-      statusEl.style.color = "#d4ae6d";
-      statusEl.textContent = "Recording your response & notifying Sooraj & Sreejaya...";
-    }
-
-    // 1. Save locally
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(values));
-    } catch {}
-
-    // 2. Prepare automated email data
-    const emailRecipient = "sooraj1119@gmail.com";
-    const attendingText = values.attendance === "yes" ? "Joyfully Accept" : "Sending Love From Afar";
-    const emailSubject = `Wedding Reception RSVP: ${values.name} (${attendingText})`;
-    const emailBody = `Dear Sooraj & Sreejaya,\n\nHere are the RSVP details for your Wedding Reception:\n\n` +
-      `• Guest Name: ${values.name}\n` +
-      `• Attendance: ${attendingText}\n` +
-      `• Number of Guests: ${values.guests || "1"}\n` +
-      `• Message / Blessings: ${values.message || "None"}\n\n` +
-      `Submitted for Wednesday, 23rd December 2026 at Trinita Casa Events & Banquet, Edappally, Kochi.`;
-
-    let emailSent = false;
-
-    // 3. Post to local backend endpoint /api/rsvp (which persists and forwards)
-    try {
-      const resp = await fetch("/api/rsvp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      if (resp.ok) {
-        emailSent = true;
+      event.preventDefault();
+      const submitBtn = $("#rsvp-submit-btn") || form.querySelector('button[type="submit"]');
+      const statusEl = $("#rsvp-status");
+      const values = Object.fromEntries(new FormData(form));
+      values.name = values.name ? values.name.trim() : "";
+      if (!values.name) {
+        form.elements.name.setCustomValidity("Please enter your name.");
+        form.elements.name.reportValidity();
+        return;
       }
-    } catch (e) {
-      console.warn("Local /api/rsvp note:", e);
-    }
 
-    // 4. Also send via FormSubmit API directly to sooraj1119@gmail.com
-    try {
-      const fsResp = await fetch(`https://formsubmit.co/ajax/${emailRecipient}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: JSON.stringify({
-          _subject: emailSubject,
-          _template: "table",
-          "Guest Name": values.name,
-          "Attendance": attendingText,
-          "Number of Guests": values.guests || "1",
-          "Blessings / Note": values.message || "",
-          "Event": "Sooraj & Sreejaya Wedding Reception (23 Dec 2026 @ Trinita Casa, Edappally)"
-        }),
-      });
-      if (fsResp.ok) {
-        emailSent = true;
+      const originalBtnText = submitBtn ? submitBtn.innerHTML : "Confirm My Attendance &rarr;";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Sending RSVP...";
       }
-    } catch (e) {
-      console.warn("FormSubmit fetch note:", e);
-    }
+      if (statusEl) {
+        statusEl.style.color = "#d4ae6d";
+        statusEl.textContent = "Recording your response & notifying Sooraj & Sreejaya...";
+      }
 
-    // 5. Update UI with confirmation and direct mailto link
-    const mailtoUrl = `mailto:${emailRecipient}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
-    const safeName = values.name.replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
-    if (statusEl) {
-      statusEl.style.color = "#74d88e";
-      statusEl.innerHTML = `✓ Thank you, <strong>${safeName}</strong>! Your RSVP has been recorded and an email notification was sent to <strong>${emailRecipient}</strong>.<br><br>` +
-        `<a href="${mailtoUrl}" class="action-pill" style="display:inline-block; font-size:11px; padding:6px 14px; margin-top:6px; color:#fff; background:rgba(212,174,109,0.3); border:1px solid #d4ae6d; border-radius:20px; text-decoration:none;">Open in Mail App &rarr;</a>`;
-    }
+      // 1. Save locally
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(values));
+      } catch {}
 
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Attendance Confirmed ✓";
-    }
-  });
+      const attendingText = (values.attendance === "yes" || values.attendance === "Joyfully accept")
+        ? "Joyfully accept"
+        : "Sending love from afar";
+      const guestsCount = attendingText === "Sending love from afar" ? "0" : (values.guests || "1");
 
-  form.elements.name.addEventListener("input", () =>
+      const payload = {
+        event: "Wedding Reception",
+        name: values.name,
+        contact: values.contact || "Not provided",
+        attendance: attendingText,
+        guests: guestsCount,
+        message: values.message || "With best wishes!",
+        _subject: `Wedding Reception RSVP: ${values.name} (${attendingText})`,
+        _template: "table"
+      };
+
+      const dispatchPromises = [];
+
+      // 1. Google Sheets Web App Endpoint
+      if (GOOGLE_SHEET_RSVP_URL && GOOGLE_SHEET_RSVP_URL.startsWith("https://script.google.com/")) {
+        dispatchPromises.push(
+          fetch(GOOGLE_SHEET_RSVP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: {
+              "Content-Type": "text/plain;charset=utf-8",
+            },
+            body: JSON.stringify(payload),
+          }).catch((err) => {
+            console.warn("Google Sheet Webhook error:", err);
+          })
+        );
+      }
+
+      // 2. FormSubmit Endpoint directly to sooraj1119@gmail.com
+      dispatchPromises.push(
+        fetch("https://formsubmit.co/ajax/sooraj1119@gmail.com", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+        }).catch((err) => {
+          console.warn("FormSubmit fetch error:", err);
+        })
+      );
+
+      // 3. FormSubmit Endpoint to srijayalaxman@gmail.com
+      dispatchPromises.push(
+        fetch("https://formsubmit.co/ajax/srijayalaxman@gmail.com", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+        }).catch((err) => {
+          console.warn("FormSubmit Sreejaya fetch error:", err);
+        })
+      );
+
+      try {
+        await Promise.allSettled(dispatchPromises);
+
+        const safeName = values.name.replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+        if (statusEl) {
+          statusEl.style.color = "#74d88e";
+          statusEl.innerHTML = `✓ Thank you, <strong>${safeName}</strong>! Your RSVP has been confirmed and recorded for Sooraj &amp; Sreejaya.`;
+        }
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = "RSVP Confirmed &#10003;";
+        }
+      } catch (err) {
+        console.warn("Submission error:", err);
+        const mailtoUrl = `mailto:sooraj1119@gmail.com,srijayalaxman@gmail.com?subject=${encodeURIComponent(payload._subject)}&body=${encodeURIComponent(`Guest Name: ${values.name}\nAttendance: ${attendingText}\nGuests: ${guestsCount}\nContact: ${values.contact || 'N/A'}\nBlessings: ${values.message}`)}`;
+        if (statusEl) {
+          statusEl.style.color = "#d4ae6d";
+          statusEl.innerHTML = `Thank you, ${values.name}! Your RSVP is saved.<br><a href="${mailtoUrl}" style="color: #d4ae6d; text-decoration: underline; font-weight: 600;">Click here to send email directly</a>.`;
+        }
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnText;
+        }
+      }
+    });
+
+    form.elements.name.addEventListener("input", () =>
     form.elements.name.setCustomValidity(""),
   );
 }

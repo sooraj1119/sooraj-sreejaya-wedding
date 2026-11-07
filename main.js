@@ -483,6 +483,7 @@ if (form) {
     } catch {}
 
     const payload = {
+      event: "Wedding",
       name: values.name,
       contact: values.contact || "Not provided",
       attendance: values.attendance,

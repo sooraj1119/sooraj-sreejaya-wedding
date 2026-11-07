@@ -1,19 +1,16 @@
 /**
- * Google Apps Script for Sooraj & Sreejaya Wedding RSVP
+ * Google Apps Script for Sooraj & Sreejaya: Wedding & Reception RSVPs
+ * Automatically manages two tabs: "Wedding RSVPs" and "Reception RSVPs"
  *
- * HOW TO SET UP IN 2 MINUTES:
- * 1. Open Google Sheets (https://sheets.new) and name it: "Sooraj & Sreejaya - Wedding RSVPs"
- * 2. In Google Sheets top menu, click: Extensions -> Apps Script
- * 3. Delete any code in Code.gs and paste this entire file content.
- * 4. Click the Save icon (Floppy disk).
- * 5. Click "Deploy" (top right) -> "New deployment"
- *    - Click the Gear icon next to "Select type" -> choose "Web app"
- *    - Description: "Wedding RSVP Webhook"
- *    - Execute as: "Me" (your email)
- *    - Who has access: "Anyone" (VERY IMPORTANT: must be "Anyone" so guests can submit without Google login)
- * 6. Click "Deploy" -> Authorize access if prompted.
- * 7. Copy the "Web app URL" (starts with https://script.google.com/macros/s/.../exec)
- * 8. Paste that URL into main.js (GOOGLE_SHEET_RSVP_URL = "...")
+ * HOW TO UPDATE YOUR EXISTING DEPLOYMENT (30 SECONDS):
+ * 1. Open your Google Sheet: "Sooraj & Sreejaya - Wedding RSVPs"
+ * 2. Click: Extensions -> Apps Script
+ * 3. Replace all code in Code.gs with this entire script.
+ * 4. Click the Save icon (Ctrl + S).
+ * 5. Click "Deploy" (top right) -> "Manage deployments"
+ * 6. Click the Pencil (Edit) icon next to your active deployment.
+ * 7. In the "Version" dropdown, select "New version".
+ * 8. Click "Deploy". (Your Web App URL stays exactly the same!)
  */
 
 function doPost(e) {
@@ -22,9 +19,36 @@ function doPost(e) {
 
   try {
     var doc = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = doc.getActiveSheet();
 
-    // Auto-create header row with nice styling if the sheet is fresh
+    // Parse incoming JSON or form-encoded payload
+    var data = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch (err) {
+        data = e.parameter || {};
+      }
+    } else if (e && e.parameter) {
+      data = e.parameter;
+    }
+
+    var isReception = (data.event && data.event.toLowerCase().indexOf("reception") !== -1);
+    var targetSheetName = isReception ? "Reception RSVPs" : "Wedding RSVPs";
+
+    // Find or create the dedicated tab for this event
+    var sheet = doc.getSheetByName(targetSheetName);
+    if (!sheet) {
+      var allSheets = doc.getSheets();
+      // If there's only one default Sheet1, rename it if it's the wedding tab
+      if (!isReception && allSheets.length === 1 && allSheets[0].getName().toLowerCase().indexOf("sheet") === 0) {
+        sheet = allSheets[0];
+        sheet.setName(targetSheetName);
+      } else {
+        sheet = doc.insertSheet(targetSheetName);
+      }
+    }
+
+    // Auto-create and style header row if the sheet is empty
     if (sheet.getLastRow() === 0) {
       var headers = [
         "Timestamp (IST)",
@@ -37,21 +61,10 @@ function doPost(e) {
       sheet.appendRow(headers);
       var headerRange = sheet.getRange(1, 1, 1, headers.length);
       headerRange.setFontWeight("bold");
-      headerRange.setBackground("#2d4a22"); // Deep festive green
-      headerRange.setFontColor("#ffffff"); // White text
+      // Wedding: Festive dark emerald green; Reception: Royal dark navy
+      headerRange.setBackground(isReception ? "#1c2e4a" : "#2d4a22");
+      headerRange.setFontColor("#ffffff");
       sheet.setFrozenRows(1);
-    }
-
-    // Parse incoming JSON payload
-    var data = {};
-    if (e && e.postData && e.postData.contents) {
-      try {
-        data = JSON.parse(e.postData.contents);
-      } catch (err) {
-        data = e.parameter || {};
-      }
-    } else if (e && e.parameter) {
-      data = e.parameter;
     }
 
     var now = new Date();
@@ -59,10 +72,12 @@ function doPost(e) {
     var name = (data.name || "A Guest").trim();
     var contact = data.contact || "Not provided";
     var attendance = data.attendance || "Joyfully accept";
+    if (attendance === "yes") attendance = "Joyfully accept";
+    if (attendance === "no") attendance = "Sending love from afar";
     var guests = (attendance === "Sending love from afar") ? "0" : (data.guests || "1 guest");
     var message = data.message || "";
 
-    // Append new RSVP row to the Google Sheet
+    // Append RSVP row to the appropriate tab
     sheet.appendRow([
       timeFormatted,
       name,
@@ -72,29 +87,48 @@ function doPost(e) {
       message
     ]);
 
-    // Send instant email notification to Sreejaya
+    // Send instant notification email to Sooraj & Sreejaya
     try {
-      var emailSubject = "Wedding RSVP: " + name + " (" + attendance + ")";
-      var emailBody = "New Wedding RSVP received for Sooraj & Sreejaya!\n\n" +
-        "Guest Name: " + name + "\n" +
-        "Contact: " + contact + "\n" +
-        "Attendance: " + attendance + "\n" +
-        "Number of Guests: " + guests + "\n" +
-        "Blessings / Wishes: " + (message || "None") + "\n\n" +
-        "Received on: " + timeFormatted + " IST\n\n" +
-        "View the full guest list in your Google Sheet:\n" + doc.getUrl();
+      var eventTitle = isReception ? "Wedding Reception (23 Dec 2026 @ Trinita Casa, Kochi)" : "Wedding Ceremony (19 Dec 2026 @ Dinesh Auditorium, Kannur)";
+      var emailSubject = (isReception ? "Reception RSVP: " : "Wedding RSVP: ") + name + " (" + attendance + ")";
+      var emailBody = "New RSVP received for Sooraj & Sreejaya!
+
+" +
+        "Event: " + eventTitle + "
+" +
+        "Guest Name: " + name + "
+" +
+        "Contact: " + contact + "
+" +
+        "Attendance: " + attendance + "
+" +
+        "Number of Guests: " + guests + "
+" +
+        "Blessings / Wishes: " + (message || "None") + "
+
+" +
+        "Timestamp: " + timeFormatted + " IST
+
+" +
+        "View both Wedding & Reception guest lists in your Google Sheet:
+" + doc.getUrl();
 
       MailApp.sendEmail({
-        to: "srijayalaxman@gmail.com",
+        to: "srijayalaxman@gmail.com, sooraj1119@gmail.com",
         subject: emailSubject,
         body: emailBody
       });
     } catch (mailError) {
-      Logger.log("Email notification error: " + mailError.toString());
+      Logger.log("Email error: " + mailError.toString());
     }
 
     return ContentService
-      .createTextOutput(JSON.stringify({ status: "success", name: name }))
+      .createTextOutput(JSON.stringify({
+        status: "success",
+        event: targetSheetName,
+        name: name,
+        row: sheet.getLastRow()
+      }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
@@ -106,12 +140,11 @@ function doPost(e) {
   }
 }
 
-// Simple healthcheck endpoint
 function doGet(e) {
   return ContentService
     .createTextOutput(JSON.stringify({
       status: "active",
-      message: "Sooraj & Sreejaya Wedding RSVP Webhook is running and ready."
+      message: "Sooraj & Sreejaya Wedding & Reception RSVP Webhook is ready."
     }))
     .setMimeType(ContentService.MimeType.JSON);
 }
