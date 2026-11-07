@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=7.8";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.8";
-import { FramePlayer } from "./frame-player.js?v=7.8";
+﻿import { events } from "./wedding.js?v=7.9";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.9";
+import { FramePlayer } from "./frame-player.js?v=7.9";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -496,7 +496,7 @@ if (eventsList) {
       (event) => `
     <article class="event-card">
       <header>
-        <span class="event-label">${event.label}</span>
+        ${event.label && event.label !== event.title ? `<span class="event-label">${event.label}</span>` : ''}
         <h3 class="event-title">${event.title}</h3>
       </header>
       <div class="event-body">
