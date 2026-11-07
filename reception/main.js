@@ -731,9 +731,10 @@ if (form) {
 
     // 5. Update UI with confirmation and direct mailto link
     const mailtoUrl = `mailto:${emailRecipient}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+    const safeName = values.name.replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
     if (statusEl) {
       statusEl.style.color = "#74d88e";
-      statusEl.innerHTML = `✓ Thank you, <strong>${values.name}</strong>! Your RSVP has been recorded and an email notification was sent to <strong>${emailRecipient}</strong>.<br><br>` +
+      statusEl.innerHTML = `✓ Thank you, <strong>${safeName}</strong>! Your RSVP has been recorded and an email notification was sent to <strong>${emailRecipient}</strong>.<br><br>` +
         `<a href="${mailtoUrl}" class="action-pill" style="display:inline-block; font-size:11px; padding:6px 14px; margin-top:6px; color:#fff; background:rgba(212,174,109,0.3); border:1px solid #d4ae6d; border-radius:20px; text-decoration:none;">Open in Mail App &rarr;</a>`;
     }
 
