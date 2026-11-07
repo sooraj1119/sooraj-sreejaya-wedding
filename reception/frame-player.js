@@ -36,7 +36,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.4`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.5`;
   }
 
   bootstrap() {
@@ -51,13 +51,28 @@ class FrameSheets {
   focus(sheet, direction = 1) {
     const dir = direction || 1;
     const wanted = [];
-    const behind = sheet - dir;
-    if (behind >= 0 && behind < this.info.sheets) wanted.push(behind);
-    for (let i = 0; i <= this.prefetchSheets; i++) {
+    // Priority 1: Current target sheet
+    if (sheet >= 0 && sheet < this.info.sheets) wanted.push(sheet);
+    // Priority 2: Forward lookahead
+    for (let i = 1; i <= this.prefetchSheets; i++) {
       const idx = sheet + i * dir;
       if (idx >= 0 && idx < this.info.sheets) wanted.push(idx);
     }
+    // Priority 3: Backward one sheet
+    const behind = sheet - dir;
+    if (behind >= 0 && behind < this.info.sheets && !wanted.includes(behind)) {
+      wanted.push(behind);
+    }
     this.wanted = wanted;
+
+    // Instantly abort downloads that are no longer wanted to free connections for active scroll target
+    for (const [idx, controller] of this.loading) {
+      if (!this.wanted.includes(idx) && idx >= this.bootstrapEnd) {
+        controller.abort();
+        this.loading.delete(idx);
+      }
+    }
+
     this.evictExcess();
     this.pump();
   }
@@ -66,9 +81,14 @@ class FrameSheets {
     if (this.cache.size <= MAX_CACHE_SHEETS) return;
     for (const [index, image] of this.cache) {
       if (!this.wanted.includes(index) && index >= this.bootstrapEnd) {
-        try {
-          if (image && typeof image.close === "function") image.close();
-        } catch {}
+        if (image) {
+          try {
+            image.onload = null;
+            image.onerror = null;
+            image.src = "";
+            if (typeof image.close === "function") image.close();
+          } catch {}
+        }
         this.cache.delete(index);
         if (this.cache.size <= MAX_CACHE_SHEETS) break;
       }
@@ -77,9 +97,14 @@ class FrameSheets {
     if (this.cache.size > MAX_CACHE_SHEETS) {
       for (const [index, image] of this.cache) {
         if (!this.wanted.slice(0, 3).includes(index)) {
-          try {
-            if (image && typeof image.close === "function") image.close();
-          } catch {}
+          if (image) {
+            try {
+              image.onload = null;
+              image.onerror = null;
+              image.src = "";
+              if (typeof image.close === "function") image.close();
+            } catch {}
+          }
           this.cache.delete(index);
           if (this.cache.size <= MAX_CACHE_SHEETS) break;
         }
@@ -139,6 +164,14 @@ class FrameSheets {
         img.onload = resolve;
         img.onerror = reject;
       });
+      const abortHandler = () => {
+        try {
+          img.onload = null;
+          img.onerror = null;
+          img.src = "";
+        } catch {}
+      };
+      controller.signal.addEventListener("abort", abortHandler, { once: true });
       img.src = this.sheetUrl(index);
 
       if (typeof img.decode === "function") {
@@ -180,7 +213,8 @@ class FrameSheets {
 
   // Gentle background prewarm into browser HTTP disk cache
   startBackgroundWarm() {
-    if (this.backgroundWarming || this.closed) return;
+    // Skip on mobile to prevent network saturation and cellular latency
+    if (IS_MOBILE || this.backgroundWarming || this.closed) return;
     this.backgroundWarming = true;
     const total = this.info.sheets;
     let next = INITIAL_WARM_SHEETS;
@@ -446,10 +480,14 @@ export class FramePlayer {
       this.info.height,
     );
     this.frame = index;
-    this.canvas.dataset.frame = String(index);
-    this.canvas.dataset.time = String(index / this.fps);
-    this.canvas.dataset.cachedSheets = String(this.store.cache.size);
-    this.onFrame?.(index / this.fps);
+    this.currentTime = index / this.fps;
+    // Keep dataset attributes updated for testing without thrashing layout
+    if (index % 12 === 0 || index === 0) {
+      this.canvas.dataset.frame = String(index);
+      this.canvas.dataset.time = String(this.currentTime);
+      this.canvas.dataset.cachedSheets = String(this.store.cache.size);
+    }
+    this.onFrame?.(this.currentTime);
     return true;
   }
 

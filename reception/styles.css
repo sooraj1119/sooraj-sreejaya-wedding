@@ -1234,7 +1234,7 @@ dialog::backdrop {
 /* Dock cards cleanly at bottom edge leaving couple and scene unobstructed */
 .chapter-copy:not([data-start='0']) {
   justify-content: flex-end !important;
-  padding-bottom: max(20px, 3.5svh) !important;
+  padding-bottom: max(72px, calc(env(safe-area-inset-bottom, 20px) + 52px)) !important;
 }
 
 .chapter-copy[data-start='0'] .hero-content {
@@ -1253,7 +1253,7 @@ dialog::backdrop {
 
 @media (max-width: 768px) {
   .chapter-copy:not([data-start='0']) {
-    padding-bottom: max(16px, 2.8svh) !important;
+    padding-bottom: max(72px, calc(env(safe-area-inset-bottom, 20px) + 52px)) !important;
   }
   .chapter-card {
     max-width: 92vw !important;
@@ -1590,4 +1590,23 @@ dialog::backdrop {
 /* Ensure View Evening Schedule button is completely hidden everywhere */
 .action-pill, [data-open-celebrations] {
   display: none !important;
+}
+
+
+/* ==========================================================
+   MOBILE HARDWARE ACCELERATION & ZERO-JANK COMPOSITING (v7.5)
+   ========================================================== */
+@media (max-width: 768px) {
+  #journey-video {
+    filter: none !important;
+    -webkit-filter: none !important;
+  }
+  .chapter-card,
+  .hero-content,
+  .invitation-card,
+  .journey-nav,
+  .journey-footer {
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+  }
 }

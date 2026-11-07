@@ -1,11 +1,23 @@
-﻿import { events } from "./wedding.js?v=6.1";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=6.1";
-import { FramePlayer } from "./frame-player.js?v=7.4";
+﻿import { events } from "./wedding.js?v=7.5";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.5";
+import { FramePlayer } from "./frame-player.js?v=7.5";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
 const journey = $("#journey");
 const stage = $(".journey-stage");
+const progressFill = $("#progress-fill");
+const numEl = $("#chapter-number");
+const nameEl = $("#chapter-name");
+const nextChapter = $("#next-chapter");
+const nextArrow = nextChapter ? nextChapter.querySelector("span") : null;
+
+const IS_TOUCH = typeof window !== "undefined" && (
+  ('ontouchstart' in window) ||
+  (navigator.maxTouchPoints > 0) ||
+  window.innerWidth <= 768
+);
+const LERP_FACTOR = IS_TOUCH ? 0.68 : 0.38;
 const status = $("#media-status");
 const loader = $("#film-loader");
 const loaderFill = $("#film-loader-fill");
@@ -71,19 +83,15 @@ function updateChapter(time) {
   // Update navigation headers and active step badges
   if (currentIndex !== -1 && currentIndex !== activeChapter) {
     activeChapter = currentIndex;
-    const numEl = $("#chapter-number");
-    const nameEl = $("#chapter-name");
     if (numEl) numEl.textContent = String(currentIndex + 1).padStart(2, "0");
     if (nameEl && copies[currentIndex]) nameEl.textContent = copies[currentIndex].dataset.name;
     chapterButtons.forEach((button, i) => {
       if (i === currentIndex) button.setAttribute("aria-current", "step");
       else button.removeAttribute("aria-current");
     });
-    const nextChapter = $("#next-chapter");
     if (nextChapter) {
       nextChapter.firstChild.textContent = currentIndex === (copies.length - 1) ? "Back to top " : "Scroll to unfold ";
-      const arrow = nextChapter.querySelector("span");
-      if (arrow) arrow.innerHTML = currentIndex === (copies.length - 1) ? "&uarr;" : "&rarr;";
+      if (nextArrow) nextArrow.innerHTML = currentIndex === (copies.length - 1) ? "&uarr;" : "&rarr;";
     }
   }
 
@@ -101,9 +109,7 @@ function updateChapter(time) {
       }
     }
 
-    // Smooth cubic easing for alpha
     const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
-
     const isActive = smoothAlpha > 0.005;
     const wasActive = copy.classList.contains("is-active");
 
@@ -115,11 +121,16 @@ function updateChapter(time) {
         copy.style.visibility = "visible";
         copy.style.pointerEvents = "auto";
       }
-      copy.style.opacity = smoothAlpha.toFixed(3);
-      const translateY = ((1 - smoothAlpha) * 12).toFixed(1);
-      copy.style.transform = `translate3d(0, ${translateY}px, 0)`;
+      const lastAlpha = copy._lastAlpha || 0;
+      if (Math.abs(smoothAlpha - lastAlpha) > 0.005) {
+        copy._lastAlpha = smoothAlpha;
+        copy.style.opacity = smoothAlpha.toFixed(3);
+        const translateY = ((1 - smoothAlpha) * 12).toFixed(1);
+        copy.style.transform = `translate3d(0, ${translateY}px, 0)`;
+      }
     } else {
       if (wasActive) {
+        copy._lastAlpha = 0;
         copy.classList.remove("is-active");
         copy.setAttribute("aria-hidden", "true");
         copy.inert = true;
@@ -130,10 +141,12 @@ function updateChapter(time) {
     }
   });
 
-  updateHeroDepth(time);
-  const progressFill = $("#progress-fill");
+  if (time <= 5.5) {
+    updateHeroDepth(time);
+  }
   if (progressFill) {
-    progressFill.style.transform = `scaleX(${clamp(time / (duration - FRAME), 0, 1)})`;
+    const scale = clamp(time / (duration - FRAME), 0, 1);
+    progressFill.style.transform = `scaleX(${scale.toFixed(4)})`;
   }
 }
 
@@ -202,7 +215,7 @@ function kineticLoop() {
 
   const diff = targetTime - smoothTime;
   if (Math.abs(diff) > 0.0005) {
-    smoothTime += diff * 0.45;
+    smoothTime += diff * LERP_FACTOR;
     player.scrubTo(smoothTime);
     updateChapter(smoothTime);
     requestAnimationFrame(kineticLoop);
@@ -373,8 +386,16 @@ function initAmbientEffects() {
     ctx.restore();
   }
 
+  let isUserScrolling = false;
+  let scrollReleaseTimer = null;
+  window.addEventListener("scroll", () => {
+    isUserScrolling = true;
+    clearTimeout(scrollReleaseTimer);
+    scrollReleaseTimer = setTimeout(() => { isUserScrolling = false; }, 180);
+  }, { passive: true });
+
   function render() {
-    if (document.hidden) {
+    if (document.hidden || (isMobileDev && isUserScrolling)) {
       requestAnimationFrame(render);
       return;
     }
