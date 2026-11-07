@@ -451,22 +451,73 @@ dialog?.addEventListener("click", (event) => {
 });
 if (form) {
   form.elements.attendance.addEventListener("change", syncGuestField);
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(form));
-    values.name = values.name.trim();
+    values.name = values.name ? values.name.trim() : "";
     if (!values.name) {
       form.elements.name.setCustomValidity("Please enter your name.");
       form.elements.name.reportValidity();
       return;
     }
+
+    const submitBtn = $("#rsvp-submit-btn") || form.querySelector("button[type='submit']");
+    const statusEl = $("#rsvp-status");
+    const originalBtnText = submitBtn ? submitBtn.innerHTML : "Confirm My Attendance &rarr;";
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending your RSVP...";
+    }
+    if (statusEl) {
+      statusEl.style.color = "#856b45";
+      statusEl.textContent = "Delivering your RSVP to Sreejaya...";
+    }
+
     try {
       localStorage.setItem(storageKey, JSON.stringify(values));
-      $("#rsvp-status").textContent =
-        `Thank you, ${values.name}. Your blessings and attendance have been recorded.`;
-    } catch {
-      $("#rsvp-status").textContent =
-        "Your reply is recorded for this session. Thank you!";
+    } catch {}
+
+    const payload = {
+      name: values.name,
+      contact: values.contact || "Not provided",
+      attendance: values.attendance,
+      guests: values.attendance === "Sending love from afar" ? "0" : (values.guests || "1"),
+      message: values.message || "With best wishes!",
+      _subject: `Wedding RSVP: ${values.name} (${values.attendance})`,
+      _template: "table"
+    };
+
+    try {
+      const res = await fetch("https://formsubmit.co/ajax/srijayalaxman@gmail.com", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (statusEl) {
+        statusEl.style.color = "#2d6a4f";
+        statusEl.innerHTML = `<strong>Thank you, ${values.name}!</strong><br />Your RSVP has been sent directly to Sreejaya (srijayalaxman@gmail.com).`;
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = "RSVP Sent &#10003;";
+      }
+    } catch (err) {
+      console.warn("FormSubmit error:", err);
+      if (statusEl) {
+        const mailtoUrl = `mailto:srijayalaxman@gmail.com?subject=${encodeURIComponent(`Wedding RSVP: ${values.name}`)}&body=${encodeURIComponent(`Name: ${values.name}\nAttendance: ${values.attendance}\nGuests: ${values.guests}\nContact: ${values.contact || 'N/A'}\nBlessings: ${values.message}`)}`;
+        statusEl.style.color = "#856b45";
+        statusEl.innerHTML = `Thank you, ${values.name}! Your RSVP is saved.<br /><a href="${mailtoUrl}" style="color: #8c734b; text-decoration: underline; font-weight: 600;">Click here to send an email to srijayalaxman@gmail.com directly</a>.`;
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+      }
     }
   });
   form.elements.name.addEventListener("input", () =>

@@ -13,8 +13,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   
   <link rel="preload" as="image" href="https://cdn.riwaaz.in/wedding-websites/themes/rameswaram/poster.jpg" />
-  <link rel="stylesheet" href="styles.css?v=3.1" />
-  <script type="module" src="main.js?v=3.1"></script>
+  <link rel="stylesheet" href="styles.css?v=3.2" />
+  <script type="module" src="main.js?v=3.2"></script>
 </head>
 <body>
   <!-- Film Loader -->
@@ -31,7 +31,7 @@
       <div class="journey-stage">
         
         <!-- Background Audio -->
-        <audio id="bgm-audio" src="bgm.mp3?v=3.1" preload="auto" loop playsinline></audio>
+        <audio id="bgm-audio" src="bgm.mp3?v=3.2" preload="auto" loop playsinline></audio>
 
         <!-- Header -->
         <header class="site-header">
@@ -180,28 +180,32 @@
     <p class="small-label">Sooraj &amp; Sreejaya</p>
     <h2 id="rsvp-title">A place <em>for you.</em></h2>
     <p class="demo-note">Kindly confirm your presence by 1 December 2026 to help us welcome you warmly.</p>
-    <form id="rsvp-form">
+    <form id="rsvp-form" action="https://formsubmit.co/srijayalaxman@gmail.com" method="POST">
+      <input type="hidden" name="_subject" value="Wedding RSVP: Sooraj &amp; Sreejaya" />
+      <input type="hidden" name="_template" value="table" />
+      <input type="hidden" name="_captcha" value="false" />
       <label>Your name<input name="name" autocomplete="name" required maxlength="100" placeholder="Your full name" /></label>
+      <label>Your phone or email (optional)<input name="contact" autocomplete="email" maxlength="100" placeholder="Phone number or email address" /></label>
       <label>Will you join us?
         <select name="attendance">
-          <option value="yes">Joyfully accept</option>
-          <option value="no">Sending love from afar</option>
+          <option value="Joyfully accept">Joyfully accept</option>
+          <option value="Sending love from afar">Sending love from afar</option>
         </select>
       </label>
       <label id="guest-field">Number of guests
         <select name="guests">
-          <option value="1">1 guest</option>
-          <option value="2" selected>2 guests</option>
-          <option value="3">3 guests</option>
-          <option value="4">4 guests</option>
-          <option value="5">5+ guests (Family)</option>
+          <option value="1 guest">1 guest</option>
+          <option value="2 guests" selected>2 guests</option>
+          <option value="3 guests">3 guests</option>
+          <option value="4 guests">4 guests</option>
+          <option value="5+ guests (Family)">5+ guests (Family)</option>
         </select>
       </label>
       <label>A little note / blessings
         <textarea name="message" rows="3" maxlength="500" placeholder="A blessing, prayer, or warm wish for Sooraj &amp; Sreejaya"></textarea>
       </label>
-      <button class="rsvp-button" type="submit">Confirm My Attendance <span aria-hidden="true">&rarr;</span></button>
-      <p id="rsvp-status" role="status" style="margin-top: 12px; font-size: 11px; color: #856b45;"></p>
+      <button class="rsvp-button" id="rsvp-submit-btn" type="submit">Confirm My Attendance <span aria-hidden="true">&rarr;</span></button>
+      <p id="rsvp-status" role="status" style="margin-top: 12px; font-size: 12px; line-height: 1.5; color: #856b45; font-weight: 500;"></p>
     </form>
   </dialog>
 
