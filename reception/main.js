@@ -1,6 +1,6 @@
 ﻿import { events } from "./wedding.js?v=6.1";
 import { FRAMES_BASE, POSTER } from "./demo-config.js?v=6.1";
-import { FramePlayer } from "./frame-player.js?v=7.2";
+import { FramePlayer } from "./frame-player.js?v=7.3";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -131,8 +131,15 @@ function updateChapter(time) {
 }
 
 function measure() {
-  stageWidth = stage.clientWidth;
-  stageHeight = stage.clientHeight;
+  const sw = stage.clientWidth;
+  const sh = stage.clientHeight;
+  if (stageWidth && stageHeight) {
+    const dw = Math.abs(stageWidth - sw);
+    const dh = Math.abs(stageHeight - sh);
+    if (dw < 4 && dh < 60) return;
+  }
+  stageWidth = sw;
+  stageHeight = sh;
   player?.resize();
   updateHeroDepth(presented);
 }
@@ -301,7 +308,11 @@ function initAmbientEffects() {
   let width = (ambCanvas.width = window.innerWidth);
   let height = (ambCanvas.height = window.innerHeight);
 
+  const isMobileDev = window.innerWidth <= 768 || (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
   window.addEventListener("resize", () => {
+    const dw = Math.abs(width - window.innerWidth);
+    const dh = Math.abs(height - window.innerHeight);
+    if (dw < 4 && dh < 60) return;
     width = ambCanvas.width = window.innerWidth;
     height = ambCanvas.height = window.innerHeight;
   }, { passive: true });
@@ -374,11 +385,13 @@ function initAmbientEffects() {
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(245, 215, 140, ${currentAlpha})`;
-      ctx.shadowColor = 'rgba(245, 205, 110, 0.8)';
-      ctx.shadowBlur = 8;
+      if (!isMobileDev) {
+        ctx.shadowColor = 'rgba(245, 205, 110, 0.8)';
+        ctx.shadowBlur = 8;
+      }
       ctx.fill();
     }
-    ctx.shadowBlur = 0;
+    if (!isMobileDev) ctx.shadowBlur = 0;
 
     // Draw petals
     for (const p of petals) {
@@ -734,19 +747,23 @@ function updateMusicUI() {
   }
 }
 
+let audioStarting = false;
 function startAudio() {
   if (musicPlaying && bgm && !bgm.paused) return;
-  if (!bgm) return;
+  if (!bgm || audioStarting) return;
+  audioStarting = true;
   bgm.volume = 0.75;
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
         musicPlaying = true;
+        audioStarting = false;
         hideAudioPrompt();
         updateMusicUI();
       })
       .catch(() => {
+        audioStarting = false;
         showAudioPrompt();
         updateMusicUI();
       });

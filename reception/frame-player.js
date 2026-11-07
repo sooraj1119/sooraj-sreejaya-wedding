@@ -1,17 +1,17 @@
-// High-Performance Crash-Proof Frame Player with Dynamic Mobile Optimization & Strict Memory Management
+// Ultra-Stable Crash-Proof Frame Player with Native HTMLImageElement Decoding & Zero-Leak Buffer Management
 const IS_MOBILE = typeof window !== "undefined" && (
   window.innerWidth <= 768 ||
   (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches) ||
   /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")
 );
 
-// Memory & performance constants dynamically tuned for device capability:
-// Mobile: 640x360 frames (1920x720 sheet = 5.5MB per sheet). Max 6 cached sheets = 33MB RAM total (well under iOS WebKit limit).
-// Desktop: 1280x720 HD frames (3840x1440 sheet = 22MB per sheet). Max 14 cached sheets.
-const PREFETCH_FRAMES = IS_MOBILE ? 18 : 36;
-const INITIAL_WARM_SHEETS = IS_MOBILE ? 3 : 6;
-const MAX_CACHE_SHEETS = IS_MOBILE ? 6 : 14;
-const MAX_CONCURRENT = IS_MOBILE ? 2 : 5;
+// Memory & performance bounds:
+// Mobile: 640x360 frames (1920x720 sheet = 5.5MB). Max 5 cached sheets = ~27MB RAM total.
+// Desktop: 1280x720 HD frames (3840x1440 sheet = 22MB). Max 12 cached sheets = ~260MB RAM.
+const PREFETCH_FRAMES = IS_MOBILE ? 12 : 30; // Mobile: 2 sheets ahead; Desktop: 5 sheets ahead
+const INITIAL_WARM_SHEETS = IS_MOBILE ? 2 : 5; // Mobile: 2 sheets; Desktop: 5 sheets
+const MAX_CACHE_SHEETS = IS_MOBILE ? 5 : 12; // Strictly bounded LRU cache
+const MAX_CONCURRENT = IS_MOBILE ? 2 : 4;
 
 class FrameSheets {
   constructor(manifest, variant, framesBase, onLoad, onError) {
@@ -32,11 +32,10 @@ class FrameSheets {
     this.onLoad = onLoad;
     this.onError = onError;
     this.closed = false;
-    this.backgroundWarming = false;
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.2`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.3`;
   }
 
   bootstrap() {
@@ -64,21 +63,21 @@ class FrameSheets {
 
   evictExcess() {
     if (this.cache.size <= MAX_CACHE_SHEETS) return;
-    for (const [index, bitmap] of this.cache) {
+    for (const [index, image] of this.cache) {
       if (!this.wanted.includes(index) && index >= this.bootstrapEnd) {
         try {
-          if (bitmap && typeof bitmap.close === "function") bitmap.close();
+          if (image && typeof image.close === "function") image.close();
         } catch {}
         this.cache.delete(index);
         if (this.cache.size <= MAX_CACHE_SHEETS) break;
       }
     }
-    // Strict fallback: if still exceeding max sheets (e.g. during rapid scrubbing), evict furthest
+    // Hard clamp: if still over limit, drop oldest non-adjacent sheets
     if (this.cache.size > MAX_CACHE_SHEETS) {
-      for (const [index, bitmap] of this.cache) {
+      for (const [index, image] of this.cache) {
         if (!this.wanted.slice(0, 2).includes(index)) {
           try {
-            if (bitmap && typeof bitmap.close === "function") bitmap.close();
+            if (image && typeof image.close === "function") image.close();
           } catch {}
           this.cache.delete(index);
           if (this.cache.size <= MAX_CACHE_SHEETS) break;
@@ -91,11 +90,11 @@ class FrameSheets {
     if (this.cache.has(targetSheet)) return this.cache.get(targetSheet);
     let best = null;
     let minDiff = Infinity;
-    for (const [sheetIdx, bitmap] of this.cache) {
+    for (const [sheetIdx, image] of this.cache) {
       const diff = Math.abs(sheetIdx - targetSheet);
-      if (diff < minDiff && diff <= 4) {
+      if (diff < minDiff && diff <= 3) {
         minDiff = diff;
-        best = bitmap;
+        best = image;
       }
     }
     return best;
@@ -127,34 +126,46 @@ class FrameSheets {
     return Array.from({ length: this.bootstrapEnd }, (_, index) => index);
   }
 
+  // Safe native HTMLImageElement decoding: avoids WebKit createImageBitmap memory leaks completely
   async load(index, controller) {
-    let bitmap;
+    if (this.closed || controller.signal.aborted) return;
     try {
-      const response = await fetch(this.sheetUrl(index), {
-        signal: controller.signal,
+      const img = new Image();
+      img.decoding = "async";
+      img.crossOrigin = "anonymous";
+      
+      const loadPromise = new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
       });
-      if (!response.ok) throw new Error(`Frame sheet ${response.status}`);
-      const blob = await response.blob();
-      if ("createImageBitmap" in window) {
-        bitmap = await createImageBitmap(blob);
-      } else {
-        const url = URL.createObjectURL(blob);
-        const image = new Image();
-        image.src = url;
+      img.src = this.sheetUrl(index);
+
+      // Await native asynchronous decode
+      if (typeof img.decode === "function") {
         try {
-          await image.decode();
-        } finally {
-          URL.revokeObjectURL(url);
+          await img.decode();
+        } catch {
+          await loadPromise;
         }
-        image.close = () => { image.src = ""; };
-        bitmap = image;
-      }
-      if (this.closed || controller.signal.aborted) {
-        try { if (bitmap && typeof bitmap.close === "function") bitmap.close(); } catch {}
       } else {
-        this.cache.set(index, bitmap);
-        this.onLoad();
+        await loadPromise;
       }
+
+      if (this.closed || controller.signal.aborted) {
+        img.onload = null;
+        img.onerror = null;
+        img.src = "";
+        return;
+      }
+
+      img.close = () => {
+        img.onload = null;
+        img.onerror = null;
+        img.src = "";
+      };
+
+      this.cache.set(index, img);
+      this.onLoad();
     } catch (error) {
       if (!controller.signal.aborted && !this.closed) {
         const count = (this.failures.get(index) || 0) + 1;
@@ -167,35 +178,11 @@ class FrameSheets {
     }
   }
 
-  // Progressive background prewarm of sheets into browser HTTP cache (desktop only)
-  startBackgroundWarm() {
-    if (IS_MOBILE || this.backgroundWarming || this.closed) return;
-    this.backgroundWarming = true;
-    const total = this.info.sheets;
-    let next = INITIAL_WARM_SHEETS;
-    const concurrency = 2;
-    const runWorker = async () => {
-      while (!this.closed) {
-        const idx = next++;
-        if (idx >= total) break;
-        try {
-          const resp = await fetch(this.sheetUrl(idx));
-          if (resp.ok) await resp.blob();
-        } catch {}
-        // Yield to main thread
-        await new Promise(r => setTimeout(r, 80));
-      }
-    };
-    for (let c = 0; c < concurrency; c++) {
-      runWorker();
-    }
-  }
-
   dispose() {
     this.closed = true;
     for (const request of this.loading.values()) request.abort();
-    for (const bitmap of this.cache.values()) {
-      try { if (bitmap && typeof bitmap.close === "function") bitmap.close(); } catch {}
+    for (const image of this.cache.values()) {
+      try { if (image && typeof image.close === "function") image.close(); } catch {}
     }
     this.cache.clear();
   }
@@ -232,6 +219,8 @@ export class FramePlayer {
     this.lastTick = 0;
     this.pendingJump = null;
     this.ready = false;
+    this.lastCanvasW = 0;
+    this.lastCanvasH = 0;
     if (poster) {
       this.poster = new Image();
       this.poster.src = poster;
@@ -251,8 +240,9 @@ export class FramePlayer {
         const index = next++;
         if (index >= total) break;
         try {
-          const response = await fetch(this.store.sheetUrl(index));
-          if (response.ok) await response.blob();
+          const img = new Image();
+          img.src = this.store.sheetUrl(index);
+          if (typeof img.decode === "function") await img.decode();
         } catch {}
         done += 1;
         onProgress?.(done / total);
@@ -266,7 +256,7 @@ export class FramePlayer {
   async load() {
     try {
       this.onProgress?.(0.1, "Preparing your journey...");
-      const response = await fetch(`${this.framesBase}/manifest.json?v=7.2`, { cache: "no-store" });
+      const response = await fetch(`${this.framesBase}/manifest.json?v=7.3`, { cache: "no-store" });
       if (!response.ok) throw new Error("Frame manifest unavailable");
       const manifest = await response.json();
       if (this.closed) return;
@@ -274,7 +264,6 @@ export class FramePlayer {
       this.perSheet = manifest.columns * manifest.rows;
       this.columns = manifest.columns;
       
-      // Auto-select lightweight mobile variant on mobile devices to prevent OOM crash
       this.variant = IS_MOBILE ? "mobile" : "desktop";
       this.info = manifest.variants[this.variant] || manifest.variants["desktop"];
       this.duration = this.info.count / this.fps;
@@ -298,9 +287,6 @@ export class FramePlayer {
       this.ready = true;
       this.onProgress?.(1, "");
       this.onReady?.({ duration: this.duration, fps: this.fps });
-      
-      // Kick off gentle background caching on desktop only
-      this.store.startBackgroundWarm();
     } catch (error) {
       this.fail(error);
     }
@@ -338,21 +324,41 @@ export class FramePlayer {
     );
   }
 
+  // Stable resize: ignores tiny height shifts (<60px) caused by mobile Safari address bar collapse
   resize() {
     const rect = this.canvas.getBoundingClientRect();
-    this.width = Math.max(1, rect.width);
-    this.height = Math.max(1, rect.height);
+    const w = Math.max(1, rect.width);
+    const h = Math.max(1, rect.height);
+
+    if (this.lastCanvasW && this.lastCanvasH) {
+      const dw = Math.abs(this.lastCanvasW - w);
+      const dh = Math.abs(this.lastCanvasH - h);
+      if (dw < 4 && dh < 60) {
+        return; // Skip destructive buffer reallocation during scrolling!
+      }
+    }
+
+    this.lastCanvasW = w;
+    this.lastCanvasH = h;
+    this.width = w;
+    this.height = h;
+
     const nativeDpr = window.devicePixelRatio || 1;
-    // On mobile, clamp DPR to 2 to prevent excessive framebuffer memory
-    const dpr = IS_MOBILE ? Math.min(nativeDpr, 2) : Math.min(Math.max(nativeDpr, 1.5), 2.5);
-    this.canvas.width = Math.round(this.width * dpr);
-    this.canvas.height = Math.round(this.height * dpr);
+    const dpr = IS_MOBILE ? Math.min(nativeDpr, 1.5) : Math.min(Math.max(nativeDpr, 1.25), 2.0);
+    const targetW = Math.round(this.width * dpr);
+    const targetH = Math.round(this.height * dpr);
+
+    if (this.canvas.width !== targetW || this.canvas.height !== targetH) {
+      this.canvas.width = targetW;
+      this.canvas.height = targetH;
+    }
+
     this.context.setTransform(1, 0, 0, 1, 0, 0);
     this.context.scale(dpr, dpr);
     this.drawWidth = this.width;
     this.drawHeight = this.height;
     this.context.imageSmoothingEnabled = true;
-    this.context.imageSmoothingQuality = "high";
+    this.context.imageSmoothingQuality = "medium";
     if (this.frame >= 0 && this.store) this.drawFrame(this.frame, true);
     else this.drawPoster();
   }
@@ -379,27 +385,29 @@ export class FramePlayer {
   drawFrame(index, force = false) {
     if (!force && index === this.frame) return true;
     const sheet = Math.floor(index / this.perSheet);
-    let bitmap = this.store.cache.get(sheet);
-    if (!bitmap) {
-      bitmap = this.store.getClosestCached(sheet);
-      if (!bitmap) return false;
+    let image = this.store.cache.get(sheet);
+    if (!image) {
+      image = this.store.getClosestCached(sheet);
+      if (!image) return false;
     }
 
-    // Defensive grid geometry calculation
-    if (bitmap.width && bitmap.height) {
-      if (bitmap.width === 1920 && bitmap.height === 720) {
+    // Defensive geometry mapping
+    const nw = image.naturalWidth || image.width;
+    const nh = image.naturalHeight || image.height;
+    if (nw && nh) {
+      if (nw === 1920 && nh === 720) {
         this.info.width = 640;
         this.info.height = 360;
         this.columns = 3;
         this.perSheet = 6;
-      } else if (bitmap.width === 3840 && bitmap.height === 1440) {
+      } else if (nw === 3840 && nh === 1440) {
         this.info.width = 1280;
         this.info.height = 720;
         this.columns = 3;
         this.perSheet = 6;
       } else {
-        const cols = Math.max(1, Math.round(bitmap.width / this.info.width));
-        const rows = Math.max(1, Math.round(bitmap.height / this.info.height));
+        const cols = Math.max(1, Math.round(nw / this.info.width));
+        const rows = Math.max(1, Math.round(nh / this.info.height));
         this.columns = cols;
         this.perSheet = cols * rows;
       }
@@ -407,7 +415,7 @@ export class FramePlayer {
 
     const cell = index % this.perSheet;
     this.drawImage(
-      bitmap,
+      image,
       (cell % this.columns) * this.info.width,
       Math.floor(cell / this.columns) * this.info.height,
       this.info.width,
