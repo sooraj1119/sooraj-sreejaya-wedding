@@ -1585,3 +1585,9 @@ dialog::backdrop {
     max-width: 320px !important;
   }
 }
+
+
+/* Ensure View Evening Schedule button is completely hidden everywhere */
+.action-pill, [data-open-celebrations] {
+  display: none !important;
+}
