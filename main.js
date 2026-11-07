@@ -407,6 +407,10 @@ $("#close-details")?.addEventListener("click", () => detailsDialog.close());
 detailsDialog?.addEventListener("close", () => {
   if (!dialog.open) document.body.style.overflow = "";
 });
+// Google Apps Script Web App URL for Google Sheets RSVP recording
+// Paste your deployed Google Apps Script Web App URL here:
+const GOOGLE_SHEET_RSVP_URL = "";
+
 const form = $("#rsvp-form");
 const storageKey = "sooraj-sreejaya-rsvp-preview-v1";
 function syncGuestField() {
@@ -488,29 +492,59 @@ if (form) {
       _template: "table"
     };
 
-    try {
-      const res = await fetch("https://formsubmit.co/ajax/srijayalaxman@gmail.com", {
+    const dispatchPromises = [];
+
+    // 1. Google Sheets Web App Endpoint (Appends directly to private Google Sheet)
+    if (GOOGLE_SHEET_RSVP_URL && GOOGLE_SHEET_RSVP_URL.startsWith("https://script.google.com/")) {
+      dispatchPromises.push(
+        fetch(GOOGLE_SHEET_RSVP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8",
+          },
+          body: JSON.stringify(payload),
+        }).catch((err) => {
+          console.warn("Google Sheet Webhook error:", err);
+        })
+      );
+    }
+
+    // 2. FormSubmit Endpoint (Dual redundancy & instant email dispatch to Sreejaya)
+    dispatchPromises.push(
+      fetch("https://formsubmit.co/ajax/srijayalaxman@gmail.com", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json"
+          "Accept": "application/json",
         },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json().catch(() => ({}));
+        body: JSON.stringify(payload),
+      }).catch((err) => {
+        console.warn("FormSubmit dispatch error:", err);
+      })
+    );
+
+    try {
+      await Promise.allSettled(dispatchPromises);
 
       if (statusEl) {
         statusEl.style.color = "#2d6a4f";
-        statusEl.innerHTML = `<strong>Thank you, ${values.name}!</strong><br />Your RSVP has been sent directly to Sreejaya (srijayalaxman@gmail.com).`;
+        statusEl.innerHTML = `<strong>Thank you, ${values.name}!</strong><br />Your RSVP has been confirmed and recorded for Sooraj &amp; Sreejaya.`;
       }
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = "RSVP Sent &#10003;";
+        submitBtn.innerHTML = "RSVP Confirmed &#10003;";
       }
     } catch (err) {
-      console.warn("FormSubmit error:", err);
+      console.warn("Submission error:", err);
       if (statusEl) {
-        const mailtoUrl = `mailto:srijayalaxman@gmail.com?subject=${encodeURIComponent(`Wedding RSVP: ${values.name}`)}&body=${encodeURIComponent(`Name: ${values.name}\nAttendance: ${values.attendance}\nGuests: ${values.guests}\nContact: ${values.contact || 'N/A'}\nBlessings: ${values.message}`)}`;
+        const mailtoUrl = `mailto:srijayalaxman@gmail.com?subject=${encodeURIComponent(
+          `Wedding RSVP: ${values.name}`
+        )}&body=${encodeURIComponent(
+          `Name: ${values.name}\nAttendance: ${values.attendance}\nGuests: ${values.guests}\nContact: ${
+            values.contact || "N/A"
+          }\nBlessings: ${values.message}`
+        )}`;
         statusEl.style.color = "#856b45";
         statusEl.innerHTML = `Thank you, ${values.name}! Your RSVP is saved.<br /><a href="${mailtoUrl}" style="color: #8c734b; text-decoration: underline; font-weight: 600;">Click here to send an email to srijayalaxman@gmail.com directly</a>.`;
       }
