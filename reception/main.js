@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=8.0";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.0";
-import { FramePlayer } from "./frame-player.js?v=8.0";
+﻿import { events } from "./wedding.js?v=8.1";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.1";
+import { FramePlayer } from "./frame-player.js?v=8.1";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -202,11 +202,11 @@ function updateTargetScroll() {
   if (currentScroll > 10) {
     startAudio();
   }
-  if (!player?.ready || staticMode) return;
-
   const maxScroll = Math.max(1, journey.offsetHeight - innerHeight);
   const progress = Math.min(1, Math.max(0, currentScroll / maxScroll));
   targetTime = progress * (duration - FRAME);
+
+  if (!player?.ready || staticMode) return;
 
   if (!isLoopRunning) {
     isLoopRunning = true;
@@ -300,6 +300,9 @@ function loadFilm() {
       duration = film.duration;
       finishLoader();
       updateTargetScroll();
+      smoothTime = targetTime;
+      player.scrubTo(smoothTime);
+      updateChapter(smoothTime);
     },
     onError() {
       staticMode = true;

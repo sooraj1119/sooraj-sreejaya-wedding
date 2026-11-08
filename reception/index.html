@@ -13,9 +13,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   
+    <link rel="preload" as="image" href="./frames/mobile/000.webp?v=8.1" type="image/webp" media="(max-width: 768px)" />
+  <link rel="preload" as="image" href="./frames/desktop/000.webp?v=8.1" type="image/webp" media="(min-width: 769px)" />
   <link rel="preload" as="image" href="poster.jpg?v=4.0" />
-  <link rel="stylesheet" href="styles.css?v=8.0" />
-  <script type="module" src="main.js?v=8.0"></script>
+  <link rel="stylesheet" href="styles.css?v=8.1" />
+  <script type="module" src="main.js?v=8.1"></script>
 </head>
 <body>
   <!-- Film Loader -->
@@ -32,7 +34,7 @@
       <div class="journey-stage">
         
         <!-- Background Audio -->
-        <audio id="bgm-audio" src="bgm.mp3?v=5.0" preload="auto" loop playsinline></audio>
+        <audio id="bgm-audio" src="bgm.mp3?v=5.0" preload="none" loop playsinline></audio>
 
         <!-- Header -->
         <header class="site-header">

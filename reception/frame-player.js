@@ -1,3 +1,13 @@
+const STATIC_MANIFEST = {
+  fps: 24,
+  columns: 3,
+  rows: 2,
+  variants: {
+    mobile: { width: 640, height: 360, count: 480, sheets: 80 },
+    desktop: { width: 1280, height: 720, count: 480, sheets: 80 }
+  }
+};
+
 // Ultra-Smooth Butter-Scroller Frame Player with Native Image Decoding & High-Throughput LRU Cache
 const IS_MOBILE = typeof window !== "undefined" && (
   window.innerWidth <= 768 ||
@@ -36,7 +46,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.0`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.1`;
   }
 
   bootstrap() {
@@ -321,21 +331,16 @@ export class FramePlayer {
 
   async load() {
     try {
-      this.onProgress?.(0.1, "Preparing your journey...");
-      const response = await fetch(`${this.framesBase}/manifest.json?v=7.4`, { cache: "no-store" });
-      if (!response.ok) throw new Error("Frame manifest unavailable");
-      const manifest = await response.json();
-      if (this.closed) return;
-      this.fps = manifest.fps;
-      this.perSheet = manifest.columns * manifest.rows;
-      this.columns = manifest.columns;
+      this.fps = STATIC_MANIFEST.fps;
+      this.perSheet = STATIC_MANIFEST.columns * STATIC_MANIFEST.rows;
+      this.columns = STATIC_MANIFEST.columns;
       
       this.variant = IS_MOBILE ? "mobile" : "desktop";
-      this.info = manifest.variants[this.variant] || manifest.variants["desktop"];
+      this.info = STATIC_MANIFEST.variants[this.variant] || STATIC_MANIFEST.variants["desktop"];
       this.duration = this.info.count / this.fps;
       this.end = (this.info.count - 1) / this.fps;
       this.store = new FrameSheets(
-        manifest,
+        STATIC_MANIFEST,
         this.variant,
         this.framesBase,
         () => this.onSheet(),
@@ -343,19 +348,48 @@ export class FramePlayer {
       );
       this.resize();
 
-      this.onProgress?.(0.3, "Loading memories...");
-      await this.warmInitial((ratio) => {
-        this.onProgress?.(0.3 + ratio * 0.6, "Loading memories...");
-      });
+      // Instantly load and render Sheet 0 without any manifest network round-trip
+      const initialSheet = new Image();
+      initialSheet.decoding = "async";
+      initialSheet.crossOrigin = "anonymous";
+      initialSheet.src = this.store.sheetUrl(0);
+      initialSheet.close = () => {
+        initialSheet.onload = null;
+        initialSheet.onerror = null;
+        initialSheet.src = "";
+      };
 
-      this.store.bootstrap();
-      await this.waitForInitialFrame();
-      this.ready = true;
-      this.onProgress?.(1, "");
-      this.onReady?.({ duration: this.duration, fps: this.fps });
+      const renderInitial = () => {
+        if (this.closed || this.ready) return;
+        this.store.cache.set(0, initialSheet);
+        this.drawFrame(0, true);
+        this.ready = true;
+        this.onProgress?.(1, "");
+        this.onReady?.({ duration: this.duration, fps: this.fps });
+        // Prefetch lookahead sheets immediately
+        this.store.focus(0, 1);
+        if (!IS_MOBILE) {
+          this.store.startBackgroundWarm();
+        }
+      };
 
-      // Start gentle background warming into HTTP cache
-      this.store.startBackgroundWarm();
+      if (initialSheet.complete && initialSheet.naturalWidth > 0) {
+        renderInitial();
+      } else {
+        if (typeof initialSheet.decode === "function") {
+          initialSheet.decode().then(renderInitial).catch(() => {
+            if (initialSheet.complete) renderInitial();
+            else initialSheet.onload = renderInitial;
+          });
+        } else {
+          initialSheet.onload = renderInitial;
+        }
+        initialSheet.onerror = () => {
+          if (this.closed || this.ready) return;
+          this.ready = true;
+          this.onReady?.({ duration: this.duration, fps: this.fps });
+        };
+      }
     } catch (error) {
       this.fail(error);
     }

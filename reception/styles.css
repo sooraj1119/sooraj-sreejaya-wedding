@@ -73,6 +73,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
   background: radial-gradient(circle at center, #26211a 0%, #12100d 100%);
   color: var(--paper);
   transition: opacity 0.5s var(--ease), visibility 0.5s var(--ease);
+  pointer-events: none;
 }
 .film-loader.is-done {
   opacity: 0;
