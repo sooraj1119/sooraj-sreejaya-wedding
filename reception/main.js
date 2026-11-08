@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=8.1";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.1";
-import { FramePlayer } from "./frame-player.js?v=8.1";
+﻿import { events } from "./wedding.js?v=8.2";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.2";
+import { FramePlayer } from "./frame-player.js?v=8.2";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -17,7 +17,7 @@ const IS_TOUCH = typeof window !== "undefined" && (
   (navigator.maxTouchPoints > 0) ||
   window.innerWidth <= 768
 );
-const LERP_FACTOR = IS_TOUCH ? 0.58 : 0.30;
+const LERP_FACTOR = 0.22;
 const status = $("#media-status");
 const loader = $("#film-loader");
 const loaderFill = $("#film-loader-fill");
@@ -220,18 +220,23 @@ function kineticLoop() {
     return;
   }
 
+  // Smooth exponential dampening (Lerp) for natural, butter-smooth camera movement
   const diff = targetTime - smoothTime;
-  if (Math.abs(diff) > 0.0005) {
-    smoothTime += diff * LERP_FACTOR;
-    player.scrubTo(smoothTime);
-    updateChapter(smoothTime);
-    requestAnimationFrame(kineticLoop);
-  } else {
+  if (Math.abs(diff) < 0.0006) {
     smoothTime = targetTime;
+    presented = smoothTime;
     player.scrubTo(smoothTime);
     updateChapter(smoothTime);
     isLoopRunning = false;
+    return;
   }
+
+  smoothTime += diff * 0.22;
+  presented = smoothTime;
+  player.scrubTo(smoothTime);
+  updateChapter(smoothTime);
+
+  requestAnimationFrame(kineticLoop);
 }
 
 window.addEventListener("scroll", updateTargetScroll, { passive: true });

@@ -8,20 +8,7 @@ const STATIC_MANIFEST = {
   }
 };
 
-// Ultra-Smooth Butter-Scroller Frame Player with Native Image Decoding & High-Throughput LRU Cache
-const IS_MOBILE = typeof window !== "undefined" && (
-  window.innerWidth <= 768 ||
-  (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches) ||
-  /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")
-);
-
-// Performance & Memory Tuned:
-// Mobile: 640x360 frames (1920x720 sheet = 5.5MB). 12 cached sheets = 66MB RAM (well below 280MB iOS ceiling, but generous enough for zero stutter).
-// Desktop: 1280x720 HD frames (3840x1440 sheet = 22MB). 18 cached sheets.
-const PREFETCH_FRAMES = IS_MOBILE ? 36 : 48; // Mobile: 6 sheets ahead (1.5s); Desktop: 8 sheets ahead (2.0s)
-const INITIAL_WARM_SHEETS = IS_MOBILE ? 4 : 6;
-const MAX_CACHE_SHEETS = IS_MOBILE ? 12 : 18;
-const MAX_CONCURRENT = IS_MOBILE ? 3 : 5;
+const PREFETCH_FRAMES = 72; // 12 sheets (~3.0s lookahead buffer)
 
 class FrameSheets {
   constructor(manifest, variant, framesBase, onLoad, onError) {
@@ -42,11 +29,10 @@ class FrameSheets {
     this.onLoad = onLoad;
     this.onError = onError;
     this.closed = false;
-    this.backgroundWarming = false;
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.1`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.2`;
   }
 
   bootstrap() {
@@ -58,87 +44,46 @@ class FrameSheets {
     if (atSheet >= this.bootstrapEnd - 1) this.bootstrapEnd = 0;
   }
 
+  keepInCache(index) {
+    return this.wanted.includes(index) || index < this.bootstrapEnd;
+  }
+
   focus(sheet, direction = 1) {
     const dir = direction || 1;
     const wanted = [];
-    // Priority 1: Current target sheet
-    if (sheet >= 0 && sheet < this.info.sheets) wanted.push(sheet);
-    // Priority 2: Forward lookahead
+    // Keep 2 sheets behind for smooth backward scrubbing
+    for (let b = 2; b >= 1; b--) {
+      const behind = sheet - b * dir;
+      if (behind >= 0 && behind < this.info.sheets) wanted.push(behind);
+    }
+    // Target sheet
+    if (sheet >= 0 && sheet < this.info.sheets && !wanted.includes(sheet)) {
+      wanted.push(sheet);
+    }
+    // Forward lookahead
     for (let i = 1; i <= this.prefetchSheets; i++) {
       const idx = sheet + i * dir;
-      if (idx >= 0 && idx < this.info.sheets) wanted.push(idx);
-    }
-    // Priority 3: Backward one sheet
-    const behind = sheet - dir;
-    if (behind >= 0 && behind < this.info.sheets && !wanted.includes(behind)) {
-      wanted.push(behind);
-    }
-    this.wanted = wanted;
-
-    // Instantly abort downloads that are no longer wanted to free connections for active scroll target
-    for (const [idx, controller] of this.loading) {
-      if (!this.wanted.includes(idx) && idx >= this.bootstrapEnd) {
-        controller.abort();
-        this.loading.delete(idx);
+      if (idx >= 0 && idx < this.info.sheets && !wanted.includes(idx)) {
+        wanted.push(idx);
       }
     }
+    if (wanted.join() === this.wanted.join()) return;
+    this.wanted = wanted;
 
-    this.evictExcess();
+    for (const [index, bitmap] of this.cache) {
+      if (!this.keepInCache(index)) {
+        if (bitmap && typeof bitmap.close === "function") bitmap.close();
+        this.cache.delete(index);
+      }
+    }
+    for (const [index, request] of this.loading) {
+      if (!this.keepInCache(index)) request.abort();
+    }
     this.pump();
   }
 
-  evictExcess() {
-    if (this.cache.size <= MAX_CACHE_SHEETS) return;
-    for (const [index, image] of this.cache) {
-      if (!this.wanted.includes(index) && index >= this.bootstrapEnd) {
-        if (image) {
-          try {
-            image.onload = null;
-            image.onerror = null;
-            image.src = "";
-            if (typeof image.close === "function") image.close();
-          } catch {}
-        }
-        this.cache.delete(index);
-        if (this.cache.size <= MAX_CACHE_SHEETS) break;
-      }
-    }
-    // Hard clamp if rapid scrubbing exceeds memory budget
-    if (this.cache.size > MAX_CACHE_SHEETS) {
-      for (const [index, image] of this.cache) {
-        if (!this.wanted.slice(0, 3).includes(index)) {
-          if (image) {
-            try {
-              image.onload = null;
-              image.onerror = null;
-              image.src = "";
-              if (typeof image.close === "function") image.close();
-            } catch {}
-          }
-          this.cache.delete(index);
-          if (this.cache.size <= MAX_CACHE_SHEETS) break;
-        }
-      }
-    }
-  }
-
-  // Always return the closest available cached frame to ensure the canvas NEVER stalls or freezes
-  getClosestCached(targetSheet) {
-    if (this.cache.has(targetSheet)) return this.cache.get(targetSheet);
-    let best = null;
-    let minDiff = Infinity;
-    for (const [sheetIdx, image] of this.cache) {
-      const diff = Math.abs(sheetIdx - targetSheet);
-      if (diff < minDiff) {
-        minDiff = diff;
-        best = image;
-      }
-    }
-    return best;
-  }
-
   maxConcurrent() {
-    return MAX_CONCURRENT;
+    return 8;
   }
 
   pump() {
@@ -164,51 +109,39 @@ class FrameSheets {
   }
 
   async load(index, controller) {
-    if (this.closed || controller.signal.aborted) return;
+    let bitmap;
     try {
-      const img = new Image();
-      img.decoding = "async";
-      img.crossOrigin = "anonymous";
-      
-      const loadPromise = new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
+      const response = await fetch(this.sheetUrl(index), {
+        signal: controller.signal,
       });
-      const abortHandler = () => {
-        try {
-          img.onload = null;
-          img.onerror = null;
-          img.src = "";
-        } catch {}
-      };
-      controller.signal.addEventListener("abort", abortHandler, { once: true });
-      img.src = this.sheetUrl(index);
-
-      if (typeof img.decode === "function") {
-        try {
-          await img.decode();
-        } catch {
-          await loadPromise;
-        }
+      if (!response.ok) throw new Error(`Frame sheet ${response.status}`);
+      const blob = await response.blob();
+      if ("createImageBitmap" in window) {
+        bitmap = await createImageBitmap(blob);
       } else {
-        await loadPromise;
+        const url = URL.createObjectURL(blob);
+        const image = new Image();
+        image.src = url;
+        try {
+          await image.decode();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        image.close = () => {
+          image.src = "";
+        };
+        bitmap = image;
       }
-
-      if (this.closed || controller.signal.aborted) {
-        img.onload = null;
-        img.onerror = null;
-        img.src = "";
-        return;
+      if (
+        this.closed ||
+        controller.signal.aborted ||
+        !this.keepInCache(index)
+      ) {
+        if (bitmap && typeof bitmap.close === "function") bitmap.close();
+      } else {
+        this.cache.set(index, bitmap);
+        this.onLoad();
       }
-
-      img.close = () => {
-        img.onload = null;
-        img.onerror = null;
-        img.src = "";
-      };
-
-      this.cache.set(index, img);
-      this.onLoad();
     } catch (error) {
       if (!controller.signal.aborted && !this.closed) {
         const count = (this.failures.get(index) || 0) + 1;
@@ -221,35 +154,11 @@ class FrameSheets {
     }
   }
 
-  // Gentle background prewarm into browser HTTP disk cache
-  startBackgroundWarm() {
-    // Skip on mobile to prevent network saturation and cellular latency
-    if (IS_MOBILE || this.backgroundWarming || this.closed) return;
-    this.backgroundWarming = true;
-    const total = this.info.sheets;
-    let next = INITIAL_WARM_SHEETS;
-    const concurrency = IS_MOBILE ? 1 : 2;
-    const runWorker = async () => {
-      while (!this.closed) {
-        const idx = next++;
-        if (idx >= total) break;
-        try {
-          const img = new Image();
-          img.src = this.sheetUrl(idx);
-        } catch {}
-        await new Promise(r => setTimeout(r, IS_MOBILE ? 140 : 80));
-      }
-    };
-    for (let c = 0; c < concurrency; c++) {
-      runWorker();
-    }
-  }
-
   dispose() {
     this.closed = true;
     for (const request of this.loading.values()) request.abort();
-    for (const image of this.cache.values()) {
-      try { if (image && typeof image.close === "function") image.close(); } catch {}
+    for (const bitmap of this.cache.values()) {
+      if (bitmap && typeof bitmap.close === "function") bitmap.close();
     }
     this.cache.clear();
   }
@@ -259,7 +168,7 @@ export class FramePlayer {
   constructor({
     canvas,
     status,
-    framesBase = "public/assets/frames",
+    framesBase = "./frames",
     poster,
     onFrame,
     onReady,
@@ -276,7 +185,7 @@ export class FramePlayer {
     this.onProgress = onProgress;
     this.time = 0;
     this.direction = 0;
-    this.coarse = matchMedia("(pointer: coarse)").matches || innerWidth < 900;
+    this.coarse = typeof window !== "undefined" && (matchMedia("(pointer: coarse)").matches || innerWidth < 900);
     this.rate = this.coarse ? 2.5 : 2.2;
     this.boost = 1;
     this.lastIntent = 0;
@@ -298,34 +207,25 @@ export class FramePlayer {
     this.resize();
   }
 
-  async warmInitial(onProgress) {
-    const total = Math.min(this.info.sheets, INITIAL_WARM_SHEETS);
+  async warmHalf(onProgress) {
+    const total = Math.max(1, Math.ceil(this.info.sheets * 0.25));
     let done = 0;
-    const loadOne = async (index) => {
-      try {
-        const img = new Image();
-        img.decoding = "async";
-        img.crossOrigin = "anonymous";
-        await new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
-          img.src = this.store.sheetUrl(index);
-        });
-        if (typeof img.decode === "function") {
-          try { await img.decode(); } catch {}
-        }
-        img.close = () => {
-          img.onload = null;
-          img.onerror = null;
-          img.src = "";
-        };
-        this.store.cache.set(index, img);
-      } catch {}
-      done += 1;
-      onProgress?.(done / total);
+    let next = 0;
+    const concurrency = 4;
+    const run = async () => {
+      while (next < total && !this.closed) {
+        const index = next++;
+        try {
+          const response = await fetch(this.store.sheetUrl(index));
+          if (!response.ok) throw new Error(`Warm ${response.status}`);
+          await response.blob();
+        } catch {}
+        done += 1;
+        onProgress?.(done / total);
+      }
     };
     await Promise.all(
-      Array.from({ length: total }, (_, i) => loadOne(i))
+      Array.from({ length: concurrency }, () => run()),
     );
   }
 
@@ -334,8 +234,10 @@ export class FramePlayer {
       this.fps = STATIC_MANIFEST.fps;
       this.perSheet = STATIC_MANIFEST.columns * STATIC_MANIFEST.rows;
       this.columns = STATIC_MANIFEST.columns;
-      
-      this.variant = IS_MOBILE ? "mobile" : "desktop";
+      const coarse = typeof window !== "undefined" && (matchMedia("(pointer: coarse)").matches || innerWidth < 900);
+      this.variant = (typeof window !== "undefined" && innerWidth <= 768) ? "mobile" : "desktop";
+      this.coarse = coarse;
+      this.rate = coarse ? 2.5 : 2.2;
       this.info = STATIC_MANIFEST.variants[this.variant] || STATIC_MANIFEST.variants["desktop"];
       this.duration = this.info.count / this.fps;
       this.end = (this.info.count - 1) / this.fps;
@@ -348,62 +250,17 @@ export class FramePlayer {
       );
       this.resize();
 
-      // Instantly load and render Sheet 0 without any manifest network round-trip
-      const initialSheet = new Image();
-      initialSheet.decoding = "async";
-      initialSheet.crossOrigin = "anonymous";
-      initialSheet.src = this.store.sheetUrl(0);
-      initialSheet.close = () => {
-        initialSheet.onload = null;
-        initialSheet.onerror = null;
-        initialSheet.src = "";
-      };
+      // Immediate streaming startup matching hindu-wedding-invite
+      this.onProgress?.(0.5, "Preparing your journey...");
+      this.pendingJump = 0;
+      this.store.focus(0);
+      this.store.bootstrap();
 
-      const renderInitial = () => {
-        if (this.closed || this.ready) return;
-        this.store.cache.set(0, initialSheet);
-        this.drawFrame(0, true);
-        this.ready = true;
-        this.onProgress?.(1, "");
-        this.onReady?.({ duration: this.duration, fps: this.fps });
-        // Prefetch lookahead sheets immediately
-        this.store.focus(0, 1);
-        if (!IS_MOBILE) {
-          this.store.startBackgroundWarm();
-        }
-      };
-
-      if (initialSheet.complete && initialSheet.naturalWidth > 0) {
-        renderInitial();
-      } else {
-        if (typeof initialSheet.decode === "function") {
-          initialSheet.decode().then(renderInitial).catch(() => {
-            if (initialSheet.complete) renderInitial();
-            else initialSheet.onload = renderInitial;
-          });
-        } else {
-          initialSheet.onload = renderInitial;
-        }
-        initialSheet.onerror = () => {
-          if (this.closed || this.ready) return;
-          this.ready = true;
-          this.onReady?.({ duration: this.duration, fps: this.fps });
-        };
-      }
+      // Background stream remaining sheets into HTTP cache
+      this.warmHalf(() => {}).catch(() => {});
     } catch (error) {
       this.fail(error);
     }
-  }
-
-  waitForInitialFrame() {
-    return new Promise((resolve) => {
-      const check = () => {
-        if (this.closed) return resolve();
-        if (this.drawFrame(0, true)) resolve();
-        else setTimeout(check, 30);
-      };
-      check();
-    });
   }
 
   onSheet() {
@@ -412,6 +269,12 @@ export class FramePlayer {
       if (this.drawFrame(index)) {
         this.time = this.pendingJump;
         this.pendingJump = null;
+        if (!this.ready) {
+          this.ready = true;
+          this.onProgress?.(1, "");
+          this.onReady?.({ duration: this.duration, fps: this.fps });
+        }
+        this.onFrame?.(this.time);
       }
     }
   }
@@ -436,7 +299,7 @@ export class FramePlayer {
       const dw = Math.abs(this.lastCanvasW - w);
       const dh = Math.abs(this.lastCanvasH - h);
       if (dw < 4 && dh < 60) {
-        return; // Ignore mobile address bar shifts
+        return;
       }
     }
 
@@ -445,8 +308,9 @@ export class FramePlayer {
     this.width = w;
     this.height = h;
 
-    const nativeDpr = window.devicePixelRatio || 1;
-    const dpr = IS_MOBILE ? Math.min(nativeDpr, 1.5) : Math.min(Math.max(nativeDpr, 1.25), 2.0);
+    const nativeDpr = typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1;
+    const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+    const dpr = isMobile ? Math.min(nativeDpr, 1.5) : Math.min(Math.max(nativeDpr, 1.25), 2.0);
     const targetW = Math.round(this.width * dpr);
     const targetH = Math.round(this.height * dpr);
 
@@ -460,7 +324,7 @@ export class FramePlayer {
     this.drawWidth = this.width;
     this.drawHeight = this.height;
     this.context.imageSmoothingEnabled = true;
-    this.context.imageSmoothingQuality = "medium";
+    this.context.imageSmoothingQuality = "high";
     if (this.frame >= 0 && this.store) this.drawFrame(this.frame, true);
     else this.drawPoster();
   }
@@ -487,50 +351,24 @@ export class FramePlayer {
   drawFrame(index, force = false) {
     if (!force && index === this.frame) return true;
     const sheet = Math.floor(index / this.perSheet);
-    let image = this.store.cache.get(sheet);
-    if (!image) {
-      image = this.store.getClosestCached(sheet);
-      if (!image) return false;
-    }
-
-    const nw = image.naturalWidth || image.width;
-    const nh = image.naturalHeight || image.height;
-    if (nw && nh) {
-      if (nw === 1920 && nh === 720) {
-        this.info.width = 640;
-        this.info.height = 360;
-        this.columns = 3;
-        this.perSheet = 6;
-      } else if (nw === 3840 && nh === 1440) {
-        this.info.width = 1280;
-        this.info.height = 720;
-        this.columns = 3;
-        this.perSheet = 6;
-      } else {
-        const cols = Math.max(1, Math.round(nw / this.info.width));
-        const rows = Math.max(1, Math.round(nh / this.info.height));
-        this.columns = cols;
-        this.perSheet = cols * rows;
-      }
-    }
+    const bitmap = this.store?.cache.get(sheet);
+    if (!bitmap) return false;
 
     const cell = index % this.perSheet;
     this.drawImage(
-      image,
+      bitmap,
       (cell % this.columns) * this.info.width,
       Math.floor(cell / this.columns) * this.info.height,
       this.info.width,
       this.info.height,
     );
+
     this.frame = index;
-    this.currentTime = index / this.fps;
-    // Keep dataset attributes updated for testing without thrashing layout
-    if (index % 12 === 0 || index === 0) {
-      this.canvas.dataset.frame = String(index);
-      this.canvas.dataset.time = String(this.currentTime);
-      this.canvas.dataset.cachedSheets = String(this.store.cache.size);
-    }
-    this.onFrame?.(this.currentTime);
+    this.canvas.dataset.frame = String(index);
+    this.canvas.dataset.time = String(index / this.fps);
+    this.canvas.dataset.cachedSheets = String(this.store.cache.size);
+    if (this.status) this.status.textContent = "";
+    this.onFrame?.(index / this.fps);
     return true;
   }
 
@@ -549,16 +387,9 @@ export class FramePlayer {
     }
   }
 
-  seek(time) {
-    if (!this.store) return;
-    this.pendingJump = Math.max(0, Math.min(this.end, time));
-    const index = Math.round(this.pendingJump * this.fps);
-    this.store.focus(Math.floor(index / this.perSheet));
-    this.onSheet();
-  }
-
   fail(error) {
     if (this.closed) return;
+    this.dispose();
     this.onError?.(error);
   }
 
