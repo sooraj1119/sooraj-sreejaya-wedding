@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=7.9";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=7.9";
-import { FramePlayer } from "./frame-player.js?v=7.9";
+﻿import { events } from "./wedding.js?v=8.0";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.0";
+import { FramePlayer } from "./frame-player.js?v=8.0";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -17,7 +17,7 @@ const IS_TOUCH = typeof window !== "undefined" && (
   (navigator.maxTouchPoints > 0) ||
   window.innerWidth <= 768
 );
-const LERP_FACTOR = IS_TOUCH ? 0.68 : 0.38;
+const LERP_FACTOR = IS_TOUCH ? 0.58 : 0.30;
 const status = $("#media-status");
 const loader = $("#film-loader");
 const loaderFill = $("#film-loader-fill");
@@ -54,9 +54,9 @@ function updateHeroDepth(time) {
 
 // Discrete non-overlapping chapter timeline windows for 20.0s celebration video (3 Chapters)
 const CHAPTER_TIMELINES = [
-  { start: 0.0,  end: 5.5,  fadeIn: 0.0,  fadeOut: 4.8 },  // Chapter 1: The beginning (Ballroom dance)
-  { start: 6.8,  end: 12.8, fadeIn: 7.6,  fadeOut: 12.0 }, // Chapter 2: The union (Gazing together & close-up)
-  { start: 14.0, end: 20.5, fadeIn: 14.8, fadeOut: 20.5 }, // Chapter 3: The celebration (Walking together, Sourav compliments & RSVP)
+  { start: 0.0,  end: 5.8,  fadeIn: 0.0,  fadeOut: 4.8 },  // Chapter 1: The beginning (Ballroom dance)
+  { start: 5.0,  end: 13.0, fadeIn: 6.0,  fadeOut: 12.0 }, // Chapter 2: The union (Gazing together & close-up)
+  { start: 12.2, end: 20.5, fadeIn: 13.2, fadeOut: 20.5 }, // Chapter 3: The celebration (Walking together, Sourav compliments & RSVP)
 ];
 
 function updateChapter(time) {
@@ -70,13 +70,20 @@ function updateChapter(time) {
     return;
   }
 
-  // Determine current active chapter index
-  let currentIndex = -1;
+  // Determine current active chapter index based on maximum visible dominance
+  let currentIndex = 0;
+  let maxAlpha = -1;
   for (let i = 0; i < CHAPTER_TIMELINES.length; i++) {
     const t = CHAPTER_TIMELINES[i];
+    let a = 0;
     if (time >= t.start && time <= t.end) {
+      if (time < t.fadeIn) a = (time - t.start) / Math.max(0.01, t.fadeIn - t.start);
+      else if (time > t.fadeOut && t.fadeOut < t.end) a = (t.end - time) / Math.max(0.01, t.end - t.fadeOut);
+      else a = 1;
+    }
+    if (a > maxAlpha) {
+      maxAlpha = a;
       currentIndex = i;
-      break;
     }
   }
 

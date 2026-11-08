@@ -36,7 +36,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=7.9`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.0`;
   }
 
   bootstrap() {
@@ -291,22 +291,31 @@ export class FramePlayer {
   async warmInitial(onProgress) {
     const total = Math.min(this.info.sheets, INITIAL_WARM_SHEETS);
     let done = 0;
-    let next = 0;
-    const run = async () => {
-      while (!this.closed) {
-        const index = next++;
-        if (index >= total) break;
-        try {
-          const img = new Image();
+    const loadOne = async (index) => {
+      try {
+        const img = new Image();
+        img.decoding = "async";
+        img.crossOrigin = "anonymous";
+        await new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
           img.src = this.store.sheetUrl(index);
-          if (typeof img.decode === "function") await img.decode();
-        } catch {}
-        done += 1;
-        onProgress?.(done / total);
-      }
+        });
+        if (typeof img.decode === "function") {
+          try { await img.decode(); } catch {}
+        }
+        img.close = () => {
+          img.onload = null;
+          img.onerror = null;
+          img.src = "";
+        };
+        this.store.cache.set(index, img);
+      } catch {}
+      done += 1;
+      onProgress?.(done / total);
     };
     await Promise.all(
-      Array.from({ length: Math.min(MAX_CONCURRENT, total) }, () => run())
+      Array.from({ length: total }, (_, i) => loadOne(i))
     );
   }
 
