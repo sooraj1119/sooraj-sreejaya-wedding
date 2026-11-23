@@ -32,8 +32,11 @@ function doPost(e) {
       data = e.parameter;
     }
 
-    var isReception = (data.event && data.event.toLowerCase().indexOf("reception") !== -1);
-    var targetSheetName = isReception ? "Reception RSVPs" : "Wedding RSVPs";
+    var eventStr = (data.event || "").toLowerCase();
+    var isReception = (eventStr.indexOf("reception") !== -1);
+    var isManjunath = (eventStr.indexOf("manjunath") !== -1 || eventStr.indexOf("saritha") !== -1);
+    
+    var targetSheetName = isManjunath ? "Manjunath & Saritha RSVPs" : (isReception ? "Reception RSVPs" : "Wedding RSVPs");
 
     // Find or create the dedicated tab for this event
     var sheet = doc.getSheetByName(targetSheetName);
@@ -62,7 +65,7 @@ function doPost(e) {
       var headerRange = sheet.getRange(1, 1, 1, headers.length);
       headerRange.setFontWeight("bold");
       // Wedding: Festive dark emerald green; Reception: Royal dark navy
-      headerRange.setBackground(isReception ? "#1c2e4a" : "#2d4a22");
+      headerRange.setBackground(isManjunath ? "#7c2d12" : (isReception ? "#1c2e4a" : "#2d4a22"));
       headerRange.setFontColor("#ffffff");
       sheet.setFrozenRows(1);
     }
@@ -89,8 +92,8 @@ function doPost(e) {
 
     // Send instant notification email to Sooraj & Sreejaya
     try {
-      var eventTitle = isReception ? "Wedding Reception (23 Dec 2026 @ Trinita Casa, Kochi)" : "Wedding Ceremony (19 Dec 2026 @ Dinesh Auditorium, Kannur)";
-      var emailSubject = (isReception ? "Reception RSVP: " : "Wedding RSVP: ") + name + " (" + attendance + ")";
+      var eventTitle = isManjunath ? "Wedding Ceremony (2 Jan 2027 @ Kanbay Beach Resort, Kannur)" : (isReception ? "Wedding Reception (23 Dec 2026 @ Trinita Casa, Kochi)" : "Wedding Ceremony (19 Dec 2026 @ Dinesh Auditorium, Kannur)");
+      var emailSubject = (isManjunath ? "Wedding RSVP (Manjunath & Saritha): " : (isReception ? "Reception RSVP: " : "Wedding RSVP: ")) + name + " (" + attendance + ")";
       var emailBody = "New RSVP received for Sooraj & Sreejaya!
 
 " +
