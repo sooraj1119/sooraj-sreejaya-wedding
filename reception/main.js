@@ -800,7 +800,7 @@ function startAudio() {
         }
         musicPlaying = true;
         audioStarting = false;
-        updateAudioIcon(true);
+        updateMusicUI();
         if (audioPrompt) audioPrompt.classList.add("is-playing");
         removeGlobalAudioTriggers();
 
@@ -823,7 +823,7 @@ function startAudio() {
       })
       .catch(() => {
         audioStarting = false;
-        updateAudioIcon(false);
+        updateMusicUI();
       });
   }
 }
