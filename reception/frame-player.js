@@ -32,7 +32,7 @@ class FrameSheets {
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.2`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.3`;
   }
 
   bootstrap() {

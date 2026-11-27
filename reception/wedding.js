@@ -21,7 +21,7 @@ export const events = [
     label: 'Dinner',
     start: '2026-12-23T20:00:00+05:30',
     end: '2026-12-23T22:00:00+05:30',
-    venue: 'Trinita Casa Banquet Hall & Lawn',
-    note: 'Celebratory reception dinner banquet.',
+    venue: 'Trinita Casa Lawn & Hall',
+    note: 'Celebratory reception dinner.',
   },
 ];

@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=8.2";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.2";
-import { FramePlayer } from "./frame-player.js?v=8.2";
+﻿import { events } from "./wedding.js?v=8.3";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.3";
+import { FramePlayer } from "./frame-player.js?v=8.3";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
