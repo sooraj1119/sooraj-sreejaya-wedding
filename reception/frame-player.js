@@ -8,7 +8,10 @@ const STATIC_MANIFEST = {
   }
 };
 
-const PREFETCH_FRAMES = 72; // 12 sheets (~3.0s lookahead buffer)
+const INITIAL_WARM_SHEETS = 8; // 48 frames (2.0s of continuous runway buffer)
+const PREFETCH_FRAMES = 72; // 12 sheets ahead (3.0s lookahead buffer)
+const MAX_CACHE_SHEETS = 48; // Generous RAM buffer (under 25MB total RAM on mobile)
+const MAX_CONCURRENT = 6;
 
 class FrameSheets {
   constructor(manifest, variant, framesBase, onLoad, onError) {
@@ -22,37 +25,51 @@ class FrameSheets {
       Math.ceil(PREFETCH_FRAMES / this.perSheet),
     );
     this.cache = new Map();
-    this.loading = new Map();
+    this.loading = new Set();
     this.failures = new Map();
     this.wanted = [];
-    this.bootstrapEnd = 0;
+    this.bootstrapEnd = INITIAL_WARM_SHEETS;
     this.onLoad = onLoad;
     this.onError = onError;
     this.closed = false;
   }
 
   sheetUrl(index) {
-    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.3`;
+    return `${this.framesBase}/${this.variant}/${String(index).padStart(3, "0")}.webp?v=8.4`;
   }
 
-  bootstrap() {
-    this.bootstrapEnd = this.prefetchSheets;
-    this.pump();
-  }
-
-  clearBootstrap(atSheet) {
-    if (atSheet >= this.bootstrapEnd - 1) this.bootstrapEnd = 0;
-  }
-
-  keepInCache(index) {
-    return this.wanted.includes(index) || index < this.bootstrapEnd;
+  async fetchAndDecode(index) {
+    if (this.cache.has(index)) return this.cache.get(index);
+    const response = await fetch(this.sheetUrl(index));
+    if (!response.ok) throw new Error(`Sheet ${index} status ${response.status}`);
+    const blob = await response.blob();
+    let bitmap;
+    if ("createImageBitmap" in window) {
+      bitmap = await createImageBitmap(blob);
+    } else {
+      const url = URL.createObjectURL(blob);
+      const image = new Image();
+      image.src = url;
+      try {
+        await image.decode();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      image.close = () => { image.src = ""; };
+      bitmap = image;
+    }
+    if (!this.closed) {
+      this.cache.set(index, bitmap);
+      this.onLoad();
+    }
+    return bitmap;
   }
 
   focus(sheet, direction = 1) {
     const dir = direction || 1;
     const wanted = [];
-    // Keep 2 sheets behind for smooth backward scrubbing
-    for (let b = 2; b >= 1; b--) {
+    // Keep 3 sheets behind for smooth backward scrubbing
+    for (let b = 3; b >= 1; b--) {
       const behind = sheet - b * dir;
       if (behind >= 0 && behind < this.info.sheets) wanted.push(behind);
     }
@@ -67,96 +84,56 @@ class FrameSheets {
         wanted.push(idx);
       }
     }
-    if (wanted.join() === this.wanted.join()) return;
     this.wanted = wanted;
-
-    for (const [index, bitmap] of this.cache) {
-      if (!this.keepInCache(index)) {
-        if (bitmap && typeof bitmap.close === "function") bitmap.close();
-        this.cache.delete(index);
-      }
-    }
-    for (const [index, request] of this.loading) {
-      if (!this.keepInCache(index)) request.abort();
-    }
+    this.evictExcess();
     this.pump();
   }
 
-  maxConcurrent() {
-    return 8;
+  evictExcess() {
+    if (this.cache.size <= MAX_CACHE_SHEETS) return;
+    for (const [index, bitmap] of this.cache) {
+      // Never evict the initial bootstrap runway or current wanted window
+      if (index >= this.bootstrapEnd && !this.wanted.includes(index)) {
+        if (bitmap && typeof bitmap.close === "function") bitmap.close();
+        this.cache.delete(index);
+        if (this.cache.size <= MAX_CACHE_SHEETS) break;
+      }
+    }
   }
 
   pump() {
     if (this.closed) return;
-    const queue = [...new Set([...this.wanted, ...this.bootstrapIndices()])];
-    for (const index of queue) {
-      if (this.loading.size >= this.maxConcurrent()) break;
-      if (
-        this.cache.has(index) ||
-        this.loading.has(index) ||
-        this.failures.get(index) >= 3
-      )
+    for (const index of this.wanted) {
+      if (this.loading.size >= MAX_CONCURRENT) break;
+      if (this.cache.has(index) || this.loading.has(index) || (this.failures.get(index) || 0) >= 3) {
         continue;
-      const controller = new AbortController();
-      this.loading.set(index, controller);
-      this.load(index, controller);
+      }
+      this.loading.add(index);
+      this.fetchAndDecode(index)
+        .catch((err) => {
+          const count = (this.failures.get(index) || 0) + 1;
+          this.failures.set(index, count);
+        })
+        .finally(() => {
+          this.loading.delete(index);
+          this.pump();
+        });
     }
   }
 
-  bootstrapIndices() {
-    if (!this.bootstrapEnd) return [];
-    return Array.from({ length: this.bootstrapEnd }, (_, index) => index);
-  }
-
-  async load(index, controller) {
-    let bitmap;
-    try {
-      const response = await fetch(this.sheetUrl(index), {
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error(`Frame sheet ${response.status}`);
-      const blob = await response.blob();
-      if ("createImageBitmap" in window) {
-        bitmap = await createImageBitmap(blob);
-      } else {
-        const url = URL.createObjectURL(blob);
-        const image = new Image();
-        image.src = url;
-        try {
-          await image.decode();
-        } finally {
-          URL.revokeObjectURL(url);
-        }
-        image.close = () => {
-          image.src = "";
-        };
-        bitmap = image;
-      }
-      if (
-        this.closed ||
-        controller.signal.aborted ||
-        !this.keepInCache(index)
-      ) {
-        if (bitmap && typeof bitmap.close === "function") bitmap.close();
-      } else {
-        this.cache.set(index, bitmap);
-        this.onLoad();
-      }
-    } catch (error) {
-      if (!controller.signal.aborted && !this.closed) {
-        const count = (this.failures.get(index) || 0) + 1;
-        this.failures.set(index, count);
-        if (count >= 3) this.onError(error);
-      }
-    } finally {
-      this.loading.delete(index);
-      this.pump();
+  getBestAvailableSheet(targetSheet) {
+    if (this.cache.has(targetSheet)) return targetSheet;
+    for (let s = targetSheet - 1; s >= 0; s--) {
+      if (this.cache.has(s)) return s;
     }
+    for (let s = targetSheet + 1; s < this.info.sheets; s++) {
+      if (this.cache.has(s)) return s;
+    }
+    return -1;
   }
 
   dispose() {
     this.closed = true;
-    for (const request of this.loading.values()) request.abort();
     for (const bitmap of this.cache.values()) {
       if (bitmap && typeof bitmap.close === "function") bitmap.close();
     }
@@ -188,11 +165,7 @@ export class FramePlayer {
     this.coarse = typeof window !== "undefined" && (matchMedia("(pointer: coarse)").matches || innerWidth < 900);
     this.rate = this.coarse ? 2.5 : 2.2;
     this.boost = 1;
-    this.lastIntent = 0;
     this.frame = -1;
-    this.raf = 0;
-    this.until = 0;
-    this.lastTick = 0;
     this.pendingJump = null;
     this.ready = false;
     this.lastCanvasW = 0;
@@ -205,28 +178,6 @@ export class FramePlayer {
       };
     }
     this.resize();
-  }
-
-  async warmHalf(onProgress) {
-    const total = Math.max(1, Math.ceil(this.info.sheets * 0.25));
-    let done = 0;
-    let next = 0;
-    const concurrency = 4;
-    const run = async () => {
-      while (next < total && !this.closed) {
-        const index = next++;
-        try {
-          const response = await fetch(this.store.sheetUrl(index));
-          if (!response.ok) throw new Error(`Warm ${response.status}`);
-          await response.blob();
-        } catch {}
-        done += 1;
-        onProgress?.(done / total);
-      }
-    };
-    await Promise.all(
-      Array.from({ length: concurrency }, () => run()),
-    );
   }
 
   async load() {
@@ -250,16 +201,48 @@ export class FramePlayer {
       );
       this.resize();
 
-      // Immediate streaming startup matching hindu-wedding-invite
-      this.onProgress?.(0.5, "Preparing your journey...");
-      this.pendingJump = 0;
-      this.store.focus(0);
-      this.store.bootstrap();
+      // Golden Runway Buffer: pre-decode the first 8 sheets (~2.0s) so scroll NEVER gets stuck
+      const warmCount = Math.min(this.info.sheets, INITIAL_WARM_SHEETS);
+      let warmed = 0;
+      this.onProgress?.(0.1, "Preparing your journey...");
 
-      // Background stream remaining sheets into HTTP cache
-      this.warmHalf(() => {}).catch(() => {});
+      const warmPromises = Array.from({ length: warmCount }, async (_, i) => {
+        try {
+          await this.store.fetchAndDecode(i);
+        } catch {}
+        warmed += 1;
+        this.onProgress?.(0.1 + (warmed / warmCount) * 0.9, "Preparing your journey...");
+      });
+      await Promise.all(warmPromises);
+
+      // Draw initial frame 0 immediately
+      this.drawFrame(0, true);
+      this.ready = true;
+      this.onProgress?.(1, "");
+      this.onReady?.({ duration: this.duration, fps: this.fps });
+
+      // Start continuous background streamer for the remaining sheets
+      this.startContinuousStream();
     } catch (error) {
       this.fail(error);
+    }
+  }
+
+  async startContinuousStream() {
+    // Continuously download the remaining sheets into HTTP cache and RAM in background
+    let next = INITIAL_WARM_SHEETS;
+    const total = this.info.sheets;
+    const concurrency = 3;
+    const worker = async () => {
+      while (next < total && !this.closed) {
+        const idx = next++;
+        try {
+          await this.store.fetchAndDecode(idx);
+        } catch {}
+      }
+    };
+    for (let c = 0; c < concurrency; c++) {
+      worker();
     }
   }
 
@@ -269,12 +252,6 @@ export class FramePlayer {
       if (this.drawFrame(index)) {
         this.time = this.pendingJump;
         this.pendingJump = null;
-        if (!this.ready) {
-          this.ready = true;
-          this.onProgress?.(1, "");
-          this.onReady?.({ duration: this.duration, fps: this.fps });
-        }
-        this.onFrame?.(this.time);
       }
     }
   }
@@ -299,7 +276,7 @@ export class FramePlayer {
       const dw = Math.abs(this.lastCanvasW - w);
       const dh = Math.abs(this.lastCanvasH - h);
       if (dw < 4 && dh < 60) {
-        return;
+        return; // ignore mobile address bar shifts
       }
     }
 
@@ -350,11 +327,26 @@ export class FramePlayer {
 
   drawFrame(index, force = false) {
     if (!force && index === this.frame) return true;
-    const sheet = Math.floor(index / this.perSheet);
-    const bitmap = this.store?.cache.get(sheet);
+    const targetSheet = Math.floor(index / this.perSheet);
+    
+    let sheetToDraw = targetSheet;
+    let bitmap = this.store?.cache.get(sheetToDraw);
+    let cell = index % this.perSheet;
+
+    if (!bitmap) {
+      const fallbackSheet = this.store?.getBestAvailableSheet(targetSheet);
+      if (fallbackSheet === -1) return false;
+      sheetToDraw = fallbackSheet;
+      bitmap = this.store.cache.get(sheetToDraw);
+      if (targetSheet > fallbackSheet) {
+        cell = this.perSheet - 1;
+      } else {
+        cell = 0;
+      }
+    }
+
     if (!bitmap) return false;
 
-    const cell = index % this.perSheet;
     this.drawImage(
       bitmap,
       (cell % this.columns) * this.info.width,
@@ -363,13 +355,15 @@ export class FramePlayer {
       this.info.height,
     );
 
-    this.frame = index;
-    this.canvas.dataset.frame = String(index);
-    this.canvas.dataset.time = String(index / this.fps);
+    const actualDrawnFrame = sheetToDraw * this.perSheet + cell;
+    this.frame = actualDrawnFrame;
+    this.canvas.dataset.frame = String(actualDrawnFrame);
+    this.canvas.dataset.time = String(actualDrawnFrame / this.fps);
     this.canvas.dataset.cachedSheets = String(this.store.cache.size);
     if (this.status) this.status.textContent = "";
-    this.onFrame?.(index / this.fps);
-    return true;
+    this.onFrame?.(actualDrawnFrame / this.fps);
+
+    return (sheetToDraw === targetSheet);
   }
 
   scrubTo(time) {
@@ -391,6 +385,17 @@ export class FramePlayer {
     if (this.closed) return;
     this.dispose();
     this.onError?.(error);
+  }
+
+  getBestAvailableSheet(targetSheet) {
+    if (this.cache.has(targetSheet)) return targetSheet;
+    for (let s = targetSheet - 1; s >= 0; s--) {
+      if (this.cache.has(s)) return s;
+    }
+    for (let s = targetSheet + 1; s < this.info.sheets; s++) {
+      if (this.cache.has(s)) return s;
+    }
+    return -1;
   }
 
   dispose() {

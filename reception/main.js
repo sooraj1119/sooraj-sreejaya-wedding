@@ -1,6 +1,6 @@
-﻿import { events } from "./wedding.js?v=8.3";
-import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.3";
-import { FramePlayer } from "./frame-player.js?v=8.3";
+﻿import { events } from "./wedding.js?v=8.4";
+import { FRAMES_BASE, POSTER } from "./demo-config.js?v=8.4";
+import { FramePlayer } from "./frame-player.js?v=8.4";
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#journey-video");
@@ -17,7 +17,7 @@ const IS_TOUCH = typeof window !== "undefined" && (
   (navigator.maxTouchPoints > 0) ||
   window.innerWidth <= 768
 );
-const LERP_FACTOR = 0.22;
+const LERP_FACTOR = 0.20;
 const status = $("#media-status");
 const loader = $("#film-loader");
 const loaderFill = $("#film-loader-fill");
@@ -63,33 +63,31 @@ function updateChapter(time) {
   if (staticMode) {
     copies.forEach((copy, i) => {
       copy.classList.toggle("is-active", i === 0);
-      copy.style.opacity = i === 0 ? "1" : "0";
-      copy.style.visibility = i === 0 ? "visible" : "hidden";
-      copy.style.pointerEvents = i === 0 ? "auto" : "none";
+      copy.setAttribute("aria-hidden", String(i !== 0));
+      copy.inert = i !== 0;
     });
     return;
   }
 
-  // Determine current active chapter index based on maximum visible dominance
+  // Smooth, continuous chapter dominance windows
   let currentIndex = 0;
-  let maxAlpha = -1;
-  for (let i = 0; i < CHAPTER_TIMELINES.length; i++) {
-    const t = CHAPTER_TIMELINES[i];
-    let a = 0;
-    if (time >= t.start && time <= t.end) {
-      if (time < t.fadeIn) a = (time - t.start) / Math.max(0.01, t.fadeIn - t.start);
-      else if (time > t.fadeOut && t.fadeOut < t.end) a = (t.end - time) / Math.max(0.01, t.end - t.fadeOut);
-      else a = 1;
-    }
-    if (a > maxAlpha) {
-      maxAlpha = a;
-      currentIndex = i;
-    }
+  if (time < 5.2) {
+    currentIndex = 0; // Chapter 1: Entrance
+  } else if (time < 12.5) {
+    currentIndex = 1; // Chapter 2: Union
+  } else {
+    currentIndex = 2; // Chapter 3: Celebration & RSVP
   }
 
-  // Update navigation headers and active step badges
-  if (currentIndex !== -1 && currentIndex !== activeChapter) {
+  if (currentIndex !== activeChapter) {
     activeChapter = currentIndex;
+    copies.forEach((copy, i) => {
+      const isActive = (i === currentIndex);
+      copy.classList.toggle("is-active", isActive);
+      copy.setAttribute("aria-hidden", String(!isActive));
+      copy.inert = !isActive;
+    });
+
     if (numEl) numEl.textContent = String(currentIndex + 1).padStart(2, "0");
     if (nameEl && copies[currentIndex]) nameEl.textContent = copies[currentIndex].dataset.name;
     chapterButtons.forEach((button, i) => {
@@ -102,55 +100,6 @@ function updateChapter(time) {
     }
   }
 
-  // Calculate precise, non-overlapping opacity for each chapter
-  copies.forEach((copy, i) => {
-    const t = CHAPTER_TIMELINES[i];
-    let alpha = 0;
-    if (time >= t.start && time <= t.end) {
-      if (time < t.fadeIn) {
-        alpha = clamp((time - t.start) / Math.max(0.01, t.fadeIn - t.start), 0, 1);
-      } else if (time > t.fadeOut && t.fadeOut < t.end) {
-        alpha = clamp((t.end - time) / Math.max(0.01, t.end - t.fadeOut), 0, 1);
-      } else {
-        alpha = 1;
-      }
-    }
-
-    const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
-    const isActive = smoothAlpha > 0.005;
-    const wasActive = copy.classList.contains("is-active");
-
-    if (isActive) {
-      if (!wasActive) {
-        copy.classList.add("is-active");
-        copy.removeAttribute("aria-hidden");
-        copy.inert = false;
-        copy.style.visibility = "visible";
-        copy.style.pointerEvents = "auto";
-      }
-      const lastAlpha = copy._lastAlpha || 0;
-      if (Math.abs(smoothAlpha - lastAlpha) > 0.005) {
-        copy._lastAlpha = smoothAlpha;
-        copy.style.opacity = smoothAlpha.toFixed(3);
-        const translateY = ((1 - smoothAlpha) * 12).toFixed(1);
-        copy.style.transform = `translate3d(0, ${translateY}px, 0)`;
-      }
-    } else {
-      if (wasActive) {
-        copy._lastAlpha = 0;
-        copy.classList.remove("is-active");
-        copy.setAttribute("aria-hidden", "true");
-        copy.inert = true;
-        copy.style.opacity = "0";
-        copy.style.visibility = "hidden";
-        copy.style.pointerEvents = "none";
-      }
-    }
-  });
-
-  if (time <= 5.5) {
-    updateHeroDepth(time);
-  }
   if (progressFill) {
     const scale = clamp(time / (duration - FRAME), 0, 1);
     progressFill.style.transform = `scaleX(${scale.toFixed(4)})`;
@@ -827,8 +776,8 @@ function updateMusicUI() {
   }
 }
 
+let audioFadeTimer = null;
 function startAudio() {
-  // If app is minimized, screen is locked, or tab is hidden: STRICTLY ABORT
   if (isAppBackgrounded || (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden"))) {
     return;
   }
@@ -838,30 +787,43 @@ function startAudio() {
 
   audioStarting = true;
   bgm.muted = false;
-  bgm.volume = 0.75;
+  bgm.volume = 0.05; // start softly
   const playPromise = bgm.play();
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
-        // Double check in case device was minimized while promise resolved
-        if (isAppBackgrounded || (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden"))) {
+        if (isAppBackgrounded || document.hidden) {
           bgm.pause();
-          bgm.muted = true;
           musicPlaying = false;
           audioStarting = false;
-          updateMusicUI();
           return;
         }
         musicPlaying = true;
         audioStarting = false;
-        hideAudioPrompt();
-        updateMusicUI();
+        updateAudioIcon(true);
+        if (audioPrompt) audioPrompt.classList.add("is-playing");
         removeGlobalAudioTriggers();
+
+        // Elegant 1.8-second exponential volume swell (0.05 -> 0.75)
+        clearInterval(audioFadeTimer);
+        const targetVol = 0.75;
+        const step = 0.04;
+        audioFadeTimer = setInterval(() => {
+          if (!bgm || bgm.paused || userPaused) {
+            clearInterval(audioFadeTimer);
+            return;
+          }
+          if (bgm.volume + step >= targetVol) {
+            bgm.volume = targetVol;
+            clearInterval(audioFadeTimer);
+          } else {
+            bgm.volume += step;
+          }
+        }, 90);
       })
       .catch(() => {
         audioStarting = false;
-        showAudioPrompt();
-        updateMusicUI();
+        updateAudioIcon(false);
       });
   }
 }
